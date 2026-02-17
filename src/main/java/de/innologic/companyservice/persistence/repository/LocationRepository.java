@@ -25,4 +25,6 @@ public interface LocationRepository extends JpaRepository<LocationEntity, String
     long countByCompanyIdAndStatusAndTrashedAtIsNull(String companyId, LocationStatus status);
 
     List<LocationEntity> findAllByCompanyId(String companyId);
+
+    void deleteAllByCompanyId(String companyId);
 }

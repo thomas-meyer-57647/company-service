@@ -12,6 +12,7 @@ import de.innologic.companyservice.persistence.repository.LocationRepository;
 import java.time.Instant;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Caching;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,29 +21,36 @@ public class LocationCommandService {
 
     private final CompanyRepository companyRepository;
     private final LocationRepository locationRepository;
+    private final DeletionGuardService deletionGuardService;
 
-    public LocationCommandService(CompanyRepository companyRepository, LocationRepository locationRepository) {
+    public LocationCommandService(
+            CompanyRepository companyRepository,
+            LocationRepository locationRepository,
+            DeletionGuardService deletionGuardService
+    ) {
         this.companyRepository = companyRepository;
         this.locationRepository = locationRepository;
+        this.deletionGuardService = deletionGuardService;
     }
 
     @Caching(evict = {
-            @CacheEvict(cacheNames = "companiesById", key = "#companyId"),
+            @CacheEvict(cacheNames = "companiesById", key = "#tenantId"),
             @CacheEvict(cacheNames = "locationsByCompany", allEntries = true)
     })
     @Transactional
     public LocationEntity updateLocation(
-            String companyId,
+            String tenantId,
             String locationId,
             String name,
             String locationCode,
             String timezone,
             String modifiedBy
     ) {
+        LocationEntity location = getActiveLocationForTenant(tenantId, locationId);
+        String companyId = location.getCompanyId();
         CompanyEntity company = getActiveCompany(companyId);
         ensureMainLocationValid(company);
 
-        LocationEntity location = getActiveLocation(companyId, locationId);
         location.setName(name);
         location.setLocationCode(locationCode);
         location.setTimezone(timezone);
@@ -52,15 +60,16 @@ public class LocationCommandService {
     }
 
     @Caching(evict = {
-            @CacheEvict(cacheNames = "companiesById", key = "#companyId"),
+            @CacheEvict(cacheNames = "companiesById", key = "#tenantId"),
             @CacheEvict(cacheNames = "locationsByCompany", allEntries = true)
     })
     @Transactional
-    public LocationEntity closeLocation(String companyId, String locationId, String closedBy, String reason) {
+    public LocationEntity closeLocation(String tenantId, String locationId, String closedBy, String reason) {
+        LocationEntity location = getActiveLocationForTenant(tenantId, locationId);
+        String companyId = location.getCompanyId();
         CompanyEntity company = getActiveCompany(companyId);
         ensureMainLocationValid(company);
 
-        LocationEntity location = getActiveLocation(companyId, locationId);
         if (location.getStatus() == LocationStatus.OPEN) {
             long openCount = locationRepository.countByCompanyIdAndStatusAndTrashedAtIsNull(companyId, LocationStatus.OPEN);
             if (openCount <= 1) {
@@ -88,15 +97,16 @@ public class LocationCommandService {
     }
 
     @Caching(evict = {
-            @CacheEvict(cacheNames = "companiesById", key = "#companyId"),
+            @CacheEvict(cacheNames = "companiesById", key = "#tenantId"),
             @CacheEvict(cacheNames = "locationsByCompany", allEntries = true)
     })
     @Transactional
-    public LocationEntity reopenLocation(String companyId, String locationId, String reopenedBy) {
+    public LocationEntity reopenLocation(String tenantId, String locationId, String reopenedBy) {
+        LocationEntity location = getActiveLocationForTenant(tenantId, locationId);
+        String companyId = location.getCompanyId();
         CompanyEntity company = getActiveCompany(companyId);
         ensureMainLocationValid(company);
 
-        LocationEntity location = getActiveLocation(companyId, locationId);
         location.setStatus(LocationStatus.OPEN);
         location.setClosedAt(null);
         location.setClosedBy(null);
@@ -107,15 +117,16 @@ public class LocationCommandService {
     }
 
     @Caching(evict = {
-            @CacheEvict(cacheNames = "companiesById", key = "#companyId"),
+            @CacheEvict(cacheNames = "companiesById", key = "#tenantId"),
             @CacheEvict(cacheNames = "locationsByCompany", allEntries = true)
     })
     @Transactional
-    public LocationEntity trashLocation(String companyId, String locationId, String trashedBy) {
+    public LocationEntity trashLocation(String tenantId, String locationId, String trashedBy) {
+        LocationEntity location = getActiveLocationForTenant(tenantId, locationId);
+        String companyId = location.getCompanyId();
         CompanyEntity company = getActiveCompany(companyId);
         ensureMainLocationValid(company);
 
-        LocationEntity location = getActiveLocation(companyId, locationId);
         if (locationId.equals(company.getMainLocationId())) {
             throw new ConflictException(ErrorCode.CANNOT_TRASH_MAIN_LOCATION, "Main location cannot be trashed");
         }
@@ -140,18 +151,19 @@ public class LocationCommandService {
     }
 
     @Caching(evict = {
-            @CacheEvict(cacheNames = "companiesById", key = "#companyId"),
+            @CacheEvict(cacheNames = "companiesById", key = "#tenantId"),
             @CacheEvict(cacheNames = "locationsByCompany", allEntries = true)
     })
     @Transactional
-    public LocationEntity restoreLocation(String companyId, String locationId, String restoredBy) {
-        CompanyEntity company = getActiveCompany(companyId);
+    public LocationEntity restoreLocation(String tenantId, String locationId, String restoredBy) {
         LocationEntity location = locationRepository.findById(locationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Location not found: " + locationId));
 
-        if (!companyId.equals(location.getCompanyId())) {
-            throw new ConflictException(ErrorCode.LOCATION_NOT_IN_COMPANY, "Location does not belong to company");
+        if (!tenantId.equals(location.getCompanyId())) {
+            throw new AccessDeniedException("tenant_id does not match location.companyId");
         }
+        String companyId = location.getCompanyId();
+        CompanyEntity company = getActiveCompany(companyId);
 
         if (location.getTrashedAt() == null) {
             ensureMainLocationValid(company);
@@ -171,6 +183,7 @@ public class LocationCommandService {
     }
 
     private CompanyEntity getActiveCompany(String companyId) {
+        deletionGuardService.assertCompanyAccessible(companyId);
         CompanyEntity company = companyRepository.findById(companyId)
                 .orElseThrow(() -> new ResourceNotFoundException("Company not found: " + companyId));
         if (company.getTrashedAt() != null) {
@@ -182,9 +195,14 @@ public class LocationCommandService {
         return company;
     }
 
-    private LocationEntity getActiveLocation(String companyId, String locationId) {
-        return locationRepository.findByLocationIdAndCompanyIdAndTrashedAtIsNull(locationId, companyId)
+    private LocationEntity getActiveLocationForTenant(String tenantId, String locationId) {
+        LocationEntity location = locationRepository.findByLocationIdAndTrashedAtIsNull(locationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Location not found for company"));
+        if (!tenantId.equals(location.getCompanyId())) {
+            throw new AccessDeniedException("tenant_id does not match location.companyId");
+        }
+        deletionGuardService.assertCompanyAccessible(location.getCompanyId());
+        return location;
     }
 
     private void ensureMainLocationValid(CompanyEntity company) {

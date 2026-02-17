@@ -17,15 +17,22 @@ public class CompanyQueryService {
 
     private final CompanyRepository companyRepository;
     private final LocationRepository locationRepository;
+    private final DeletionGuardService deletionGuardService;
 
-    public CompanyQueryService(CompanyRepository companyRepository, LocationRepository locationRepository) {
+    public CompanyQueryService(
+            CompanyRepository companyRepository,
+            LocationRepository locationRepository,
+            DeletionGuardService deletionGuardService
+    ) {
         this.companyRepository = companyRepository;
         this.locationRepository = locationRepository;
+        this.deletionGuardService = deletionGuardService;
     }
 
     @Cacheable(cacheNames = "companiesById", key = "#companyId")
     @Transactional(readOnly = true)
     public CompanyEntity getActiveCompany(String companyId) {
+        deletionGuardService.assertCompanyAccessible(companyId);
         return companyRepository.findByCompanyIdAndTrashedAtIsNull(companyId)
                 .orElseThrow(() -> new ResourceNotFoundException("Company not found: " + companyId));
     }
@@ -36,6 +43,7 @@ public class CompanyQueryService {
     )
     @Transactional(readOnly = true)
     public Page<LocationEntity> listActiveLocations(String companyId, LocationStatus status, Pageable pageable) {
+        deletionGuardService.assertCompanyAccessible(companyId);
         getActiveCompany(companyId);
         if (status == null) {
             return locationRepository.findAllByCompanyIdAndTrashedAtIsNull(companyId, pageable);

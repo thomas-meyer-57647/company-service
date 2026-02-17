@@ -1,13 +1,13 @@
 package de.innologic.companyservice;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 
 import de.innologic.companyservice.persistence.entity.CompanyEntity;
 import de.innologic.companyservice.persistence.entity.LocationEntity;
@@ -16,6 +16,7 @@ import de.innologic.companyservice.persistence.entity.TrashedCause;
 import de.innologic.companyservice.persistence.repository.CompanyRepository;
 import de.innologic.companyservice.persistence.repository.LocationRepository;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,7 +24,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -44,7 +48,7 @@ class InvariantApiIntegrationTests {
         Fixture f = fixtureWithMainAndSecondaryOpen();
 
         mockMvc.perform(post("/api/v1/location/{locationId}/close", f.mainLocationId)
-                        .with(user("tester"))
+                        .with(jwtForCompany(f.companyId, "company:admin"))
                         .header("X-Company-Id", f.companyId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"maintenance\"}"))
@@ -57,7 +61,7 @@ class InvariantApiIntegrationTests {
         Fixture f = fixtureWithMainAndSecondaryOpen();
 
         mockMvc.perform(delete("/api/v1/location/{locationId}", f.mainLocationId)
-                        .with(user("tester"))
+                        .with(jwtForCompany(f.companyId, "company:admin"))
                         .header("X-Company-Id", f.companyId))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.errorCode").value("CANNOT_TRASH_MAIN_LOCATION"));
@@ -68,7 +72,7 @@ class InvariantApiIntegrationTests {
         Fixture f = fixtureWithOnlyMainOpen();
 
         mockMvc.perform(post("/api/v1/location/{locationId}/close", f.mainLocationId)
-                        .with(user("tester"))
+                        .with(jwtForCompany(f.companyId, "company:admin"))
                         .header("X-Company-Id", f.companyId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"maintenance\"}"))
@@ -81,7 +85,8 @@ class InvariantApiIntegrationTests {
         Fixture f = fixtureWithClosedSecondary();
 
         mockMvc.perform(put("/api/v1/companies/{companyId}/main-location", f.companyId)
-                        .with(user("tester"))
+                        .with(jwtForCompany(f.companyId, "company:admin"))
+                        .header("X-Company-Id", f.companyId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"locationId\":\"" + f.secondaryLocationId + "\"}"))
                 .andExpect(status().isConflict())
@@ -93,8 +98,9 @@ class InvariantApiIntegrationTests {
         Fixture f = fixtureWithMainAndSecondaryOpen();
 
         mockMvc.perform(delete("/api/v1/companies/{companyId}", f.companyId)
-                        .with(user("tester")))
-                .andExpect(status().isNoContent());
+                        .with(jwtForCompany(f.companyId, "company:admin"))
+                        .header("X-Company-Id", f.companyId))
+                .andExpect(status().isNoContent()); // falls dein Endpoint 202 liefert: hier anpassen
 
         CompanyEntity company = companyRepository.findById(f.companyId).orElseThrow();
         assertThat(company.getTrashedAt()).isNotNull();
@@ -111,6 +117,23 @@ class InvariantApiIntegrationTests {
     void apiDocsEndpointIsReachable() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk());
+    }
+
+    /**
+     * Erzeugt ein Mock-JWT passend für deine Tenant-/Scope-Checks:
+     * - tenant_id = companyId
+     * - Authorities als SCOPE_... (z.B. "SCOPE_company:admin")
+     */
+    private RequestPostProcessor jwtForCompany(String companyId, String... scopes) {
+        GrantedAuthority[] auths = Arrays.stream(scopes)
+                .map(s -> (GrantedAuthority) new SimpleGrantedAuthority("SCOPE_" + s))
+                .toArray(GrantedAuthority[]::new);
+
+        return jwt()
+                .jwt(j -> j
+                        .subject("tester")
+                        .claim("tenant_id", companyId))
+                .authorities(auths);
     }
 
     private Fixture fixtureWithMainAndSecondaryOpen() {

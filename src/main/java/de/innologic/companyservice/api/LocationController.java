@@ -8,6 +8,7 @@ import de.innologic.companyservice.service.LocationCommandService;
 import de.innologic.companyservice.service.LocationQueryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -15,6 +16,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.http.HttpStatus;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -51,10 +53,13 @@ public class LocationController {
     @GetMapping("/{locationId}")
     @Operation(
             summary = "Get location",
-            description = "Company-aware read. Requires X-Company-Id and verifies location belongs to that company."
+            description = "Location read by id. tenant_id is matched against location.companyId. JWT example: {\"sub\":\"user_123\",\"tenant_id\":\"01J3Z4...\",\"aud\":[\"company-service\"],\"scope\":\"company:read\"}",
+            security = {@SecurityRequirement(name = "bearerAuth", scopes = {"company:read"})}
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Location found"),
+            @ApiResponse(responseCode = "401", description = "Missing/invalid JWT", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Missing scope or tenant mismatch", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "Location not found", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public LocationResponse getLocation(
@@ -63,18 +68,25 @@ public class LocationController {
                     examples = @ExampleObject(value = "d290f1ee-6c54-4b01-90e6-d701748f0851"))
             @RequestHeader(name = "X-Company-Id", required = false) String companyId
     ) {
-        return LocationResponse.from(locationQueryService.getActiveLocationForCompany(locationId, resolveCompanyId(companyId)));
+        return LocationResponse.from(locationQueryService.getActiveLocationForTenant(locationId, resolveTenantId(companyId)));
     }
 
     @PutMapping("/{locationId}")
-    @Operation(summary = "Update location")
+    @Operation(summary = "Update location", security = {@SecurityRequirement(name = "bearerAuth", scopes = {"company:write"})})
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Location updated"),
+            @ApiResponse(responseCode = "401", description = "Missing/invalid JWT", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Missing scope or tenant mismatch", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Location not found", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "Invariant violation", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     public LocationResponse updateLocation(
             @PathVariable String locationId,
             @RequestHeader(name = "X-Company-Id", required = false) String companyId,
             @Valid @RequestBody LocationUpdateRequest request
     ) {
         return LocationResponse.from(locationCommandService.updateLocation(
-                resolveCompanyId(companyId),
+                resolveTenantId(companyId),
                 locationId,
                 request.name(),
                 request.locationCode(),
@@ -84,7 +96,14 @@ public class LocationController {
     }
 
     @PostMapping("/{locationId}/close")
-    @Operation(summary = "Close location")
+    @Operation(summary = "Close location", security = {@SecurityRequirement(name = "bearerAuth", scopes = {"company:admin"})})
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Location closed"),
+            @ApiResponse(responseCode = "401", description = "Missing/invalid JWT", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Missing scope or tenant mismatch", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Location not found", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "Invariant violation", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     public LocationResponse closeLocation(
             @PathVariable String locationId,
             @RequestHeader(name = "X-Company-Id", required = false) String companyId,
@@ -92,7 +111,7 @@ public class LocationController {
     ) {
         String reason = request == null ? null : request.reason();
         return LocationResponse.from(locationCommandService.closeLocation(
-                resolveCompanyId(companyId),
+                resolveTenantId(companyId),
                 locationId,
                 requestContext.subjectId(),
                 reason
@@ -100,13 +119,20 @@ public class LocationController {
     }
 
     @PostMapping("/{locationId}/reopen")
-    @Operation(summary = "Reopen location")
+    @Operation(summary = "Reopen location", security = {@SecurityRequirement(name = "bearerAuth", scopes = {"company:write"})})
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Location reopened"),
+            @ApiResponse(responseCode = "401", description = "Missing/invalid JWT", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Missing scope or tenant mismatch", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Location not found", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "Invariant violation", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     public LocationResponse reopenLocation(
             @PathVariable String locationId,
             @RequestHeader(name = "X-Company-Id", required = false) String companyId
     ) {
         return LocationResponse.from(locationCommandService.reopenLocation(
-                resolveCompanyId(companyId),
+                resolveTenantId(companyId),
                 locationId,
                 requestContext.subjectId()
         ));
@@ -114,28 +140,51 @@ public class LocationController {
 
     @DeleteMapping("/{locationId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "Trash location")
+    @Operation(summary = "Delete location", security = {@SecurityRequirement(name = "bearerAuth", scopes = {"company:admin"})})
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Location deleted"),
+            @ApiResponse(responseCode = "401", description = "Missing/invalid JWT", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Missing scope or tenant mismatch", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Location not found", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "Invariant violation", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     public void trashLocation(
             @PathVariable String locationId,
             @RequestHeader(name = "X-Company-Id", required = false) String companyId
     ) {
-        locationCommandService.trashLocation(resolveCompanyId(companyId), locationId, requestContext.subjectId());
+        locationCommandService.trashLocation(resolveTenantId(companyId), locationId, requestContext.subjectId());
     }
 
     @PostMapping("/{locationId}/restore")
-    @Operation(summary = "Restore location")
+    @Operation(summary = "Restore location", security = {@SecurityRequirement(name = "bearerAuth", scopes = {"company:admin"})})
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Location restored"),
+            @ApiResponse(responseCode = "401", description = "Missing/invalid JWT", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Missing scope or tenant mismatch", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Location not found", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "Invariant violation", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     public LocationResponse restoreLocation(
             @PathVariable String locationId,
             @RequestHeader(name = "X-Company-Id", required = false) String companyId
     ) {
         return LocationResponse.from(locationCommandService.restoreLocation(
-                resolveCompanyId(companyId),
+                resolveTenantId(companyId),
                 locationId,
                 requestContext.subjectId()
         ));
     }
 
-    private String resolveCompanyId(String companyIdHeader) {
+    private String resolveTenantId(String companyIdHeader) {
+        var tenantIdFromJwt = requestContext.tenantIdFromJwt();
+        if (tenantIdFromJwt.isPresent()) {
+            String tenantId = tenantIdFromJwt.get();
+            if (companyIdHeader != null && !companyIdHeader.isBlank() && !tenantId.equals(companyIdHeader)) {
+                throw new AccessDeniedException("tenant_id does not match X-Company-Id header");
+            }
+            return tenantId;
+        }
+
         if (companyIdHeader != null && !companyIdHeader.isBlank()) {
             return companyIdHeader;
         }

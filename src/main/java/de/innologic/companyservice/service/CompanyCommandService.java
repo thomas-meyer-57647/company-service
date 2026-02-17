@@ -3,17 +3,24 @@ package de.innologic.companyservice.service;
 import de.innologic.companyservice.domain.ConflictException;
 import de.innologic.companyservice.domain.ErrorCode;
 import de.innologic.companyservice.domain.ResourceNotFoundException;
+import de.innologic.companyservice.persistence.entity.BootstrapIdempotencyEntity;
 import de.innologic.companyservice.persistence.entity.CompanyEntity;
 import de.innologic.companyservice.persistence.entity.LocationEntity;
 import de.innologic.companyservice.persistence.entity.LocationStatus;
 import de.innologic.companyservice.persistence.entity.TrashedCause;
+import de.innologic.companyservice.persistence.repository.BootstrapIdempotencyRepository;
 import de.innologic.companyservice.persistence.repository.CompanyRepository;
 import de.innologic.companyservice.persistence.repository.LocationRepository;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Caching;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,10 +29,19 @@ public class CompanyCommandService {
 
     private final CompanyRepository companyRepository;
     private final LocationRepository locationRepository;
+    private final BootstrapIdempotencyRepository bootstrapIdempotencyRepository;
+    private final DeletionGuardService deletionGuardService;
 
-    public CompanyCommandService(CompanyRepository companyRepository, LocationRepository locationRepository) {
+    public CompanyCommandService(
+            CompanyRepository companyRepository,
+            LocationRepository locationRepository,
+            BootstrapIdempotencyRepository bootstrapIdempotencyRepository,
+            DeletionGuardService deletionGuardService
+    ) {
         this.companyRepository = companyRepository;
         this.locationRepository = locationRepository;
+        this.bootstrapIdempotencyRepository = bootstrapIdempotencyRepository;
+        this.deletionGuardService = deletionGuardService;
     }
 
     @Caching(evict = {
@@ -41,8 +57,28 @@ public class CompanyCommandService {
             String initialLocationName,
             String initialLocationCode,
             String initialLocationTimezone,
-            String createdBy
+            String createdBy,
+            String idempotencyKey
     ) {
+        String normalizedKey = normalizeIdempotencyKey(idempotencyKey);
+        String requestHash = null;
+        if (normalizedKey != null) {
+            requestHash = requestHash(
+                    name,
+                    displayName,
+                    timezone,
+                    locale,
+                    initialLocationName,
+                    initialLocationCode,
+                    initialLocationTimezone
+            );
+
+            BootstrapIdempotencyEntity existing = bootstrapIdempotencyRepository.findById(normalizedKey).orElse(null);
+            if (existing != null) {
+                return resolveExistingBootstrapResult(existing, requestHash);
+            }
+        }
+
         Instant now = Instant.now();
         String companyId = UUID.randomUUID().toString();
         String locationId = UUID.randomUUID().toString();
@@ -73,7 +109,84 @@ public class CompanyCommandService {
 
         companyRepository.save(company);
         locationRepository.save(location);
+
+        if (normalizedKey != null) {
+            BootstrapIdempotencyEntity idempotency = new BootstrapIdempotencyEntity();
+            idempotency.setIdempotencyKey(normalizedKey);
+            idempotency.setRequestHash(requestHash);
+            idempotency.setCompanyId(companyId);
+            idempotency.setCreatedAt(now);
+            idempotency.setCreatedBy(createdBy);
+            try {
+                bootstrapIdempotencyRepository.save(idempotency);
+            } catch (DataIntegrityViolationException ex) {
+                BootstrapIdempotencyEntity existing = bootstrapIdempotencyRepository.findById(normalizedKey)
+                        .orElseThrow(() -> ex);
+                return resolveExistingBootstrapResult(existing, requestHash);
+            }
+        }
+
         return company;
+    }
+
+    private CompanyEntity resolveExistingBootstrapResult(BootstrapIdempotencyEntity existing, String requestHash) {
+        if (!existing.getRequestHash().equals(requestHash)) {
+            throw new ConflictException(
+                    ErrorCode.IDEMPOTENCY_KEY_CONFLICT,
+                    "Idempotency-Key was already used with a different payload"
+            );
+        }
+        return companyRepository.findById(existing.getCompanyId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Idempotent bootstrap company not found: " + existing.getCompanyId()
+                ));
+    }
+
+    private String normalizeIdempotencyKey(String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            return null;
+        }
+        return idempotencyKey.trim();
+    }
+
+    private String requestHash(
+            String name,
+            String displayName,
+            String timezone,
+            String locale,
+            String initialLocationName,
+            String initialLocationCode,
+            String initialLocationTimezone
+    ) {
+        String canonicalPayload = canonical(name)
+                + "|" + canonical(displayName)
+                + "|" + canonical(timezone)
+                + "|" + canonical(locale)
+                + "|" + canonical(initialLocationName)
+                + "|" + canonical(initialLocationCode)
+                + "|" + canonical(initialLocationTimezone);
+        return sha256(canonicalPayload);
+    }
+
+    private String canonical(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim();
+    }
+
+    private String sha256(String input) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hashed = digest.digest(input.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(hashed.length * 2);
+            for (byte b : hashed) {
+                sb.append(String.format(Locale.ROOT, "%02x", b));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 is not available", ex);
+        }
     }
 
     @Caching(evict = {
@@ -220,6 +333,7 @@ public class CompanyCommandService {
     }
 
     private CompanyEntity getActiveCompany(String companyId) {
+        deletionGuardService.assertCompanyAccessible(companyId);
         CompanyEntity company = companyRepository.findById(companyId)
                 .orElseThrow(() -> new ResourceNotFoundException("Company not found: " + companyId));
         if (company.getTrashedAt() != null) {
