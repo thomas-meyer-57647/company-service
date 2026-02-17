@@ -1,0 +1,13 @@
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${OAUTH2_ISSUER_URI:}
+          jwk-set-uri: ${OAUTH2_JWK_SET_URI:}
+
+app:
+  security:
+    required-audience: ${OAUTH2_REQUIRED_AUDIENCE:company-service}
+  deletion:
+    required-services: ${COMPANY_DELETION_REQUIRED_SERVICES:}
