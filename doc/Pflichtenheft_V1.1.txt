@@ -388,3 +388,7 @@ Abhängige Services: Bei CompanyDeletionRequested müssen Folgedaten gelöscht werd
 Timeout/Fehler: Bei ausbleibenden Acks muss der Workflow in FAILED gehen (Monitoring/Alarm).
 Idempotenz: Bootstrap-Create und Delete müssen Retries sauber abfangen (Idempotency-Key).
 
+15. IntelliJ Run Configuration
+Beispiel-ENV:
+COMPANY_DB_HOST=localhost;COMPANY_DB_PORT=3306;COMPANY_DB_NAME=company;COMPANY_DB_USER=root;COMPANY_DB_PASSWORD=;COMPANYPORT=8080
+Hinweis: "Include system environment variables" kann aktiv bleiben, da die Variablen service-spezifisch sind.
