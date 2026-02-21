@@ -11,6 +11,10 @@ public record InitialLocationRequest(
         @Schema(example = "HQ-BER")
         String locationCode,
         @Schema(example = "Europe/Berlin")
-        String timezone
+        String timezone,
+        @Schema(example = "DE")
+        String countryCode,
+        @Schema(example = "BE")
+        String regionCode
 ) {
 }

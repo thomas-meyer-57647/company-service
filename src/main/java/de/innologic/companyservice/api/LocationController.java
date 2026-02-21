@@ -91,6 +91,8 @@ public class LocationController {
                 request.name(),
                 request.locationCode(),
                 request.timezone(),
+                request.countryCode(),
+                request.regionCode(),
                 requestContext.subjectId()
         ));
     }

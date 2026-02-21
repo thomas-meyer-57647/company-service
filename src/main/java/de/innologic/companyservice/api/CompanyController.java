@@ -83,7 +83,7 @@ public class CompanyController {
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     required = true,
                     content = @Content(examples = @ExampleObject(
-                            value = "{\"name\":\"Acme Corporation\",\"displayName\":\"ACME\",\"timezone\":\"Europe/Berlin\",\"locale\":\"de-DE\",\"initialLocation\":{\"name\":\"Headquarters\",\"locationCode\":\"HQ-BER\",\"timezone\":\"Europe/Berlin\"}}"
+                            value = "{\"name\":\"Acme Corporation\",\"displayName\":\"ACME\",\"timezone\":\"Europe/Berlin\",\"locale\":\"de-DE\",\"initialLocation\":{\"name\":\"Headquarters\",\"locationCode\":\"HQ-BER\",\"timezone\":\"Europe/Berlin\",\"countryCode\":\"DE\",\"regionCode\":\"BE\"}}"
                     )))
             CompanyCreateRequest request
     ) {
@@ -95,6 +95,8 @@ public class CompanyController {
                 request.initialLocation().name(),
                 request.initialLocation().locationCode(),
                 request.initialLocation().timezone(),
+                request.initialLocation().countryCode(),
+                request.initialLocation().regionCode(),
                 requestContext.subjectId(),
                 idempotencyKey
         ));

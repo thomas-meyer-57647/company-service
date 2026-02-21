@@ -5,6 +5,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -136,6 +137,81 @@ class BootstrapLocationDeletionIntegrationTests {
                                         .claim("tenant_id", UUID.randomUUID().toString()))
                                 .authorities(() -> "SCOPE_company:read")))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void updateLocationNormalizesCountryAndRegionCodes() throws Exception {
+        String companyId = UUID.randomUUID().toString();
+        String locationId = UUID.randomUUID().toString();
+        persistCompanyWithLocation(companyId, locationId);
+
+        mockMvc.perform(put("/api/v1/location/{locationId}", locationId)
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "editor-1")
+                                        .claim("tenant_id", companyId))
+                                .authorities(() -> "SCOPE_company:write"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name":"HQ Updated",
+                                  "locationCode":"HQ-1",
+                                  "timezone":"Europe/Berlin",
+                                  "countryCode":"de",
+                                  "regionCode":"de-hb"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.countryCode").value("DE"))
+                .andExpect(jsonPath("$.regionCode").value("DE-HB"));
+    }
+
+    @Test
+    void updateLocationWithInvalidCountryCodeReturnsBadRequest() throws Exception {
+        String companyId = UUID.randomUUID().toString();
+        String locationId = UUID.randomUUID().toString();
+        persistCompanyWithLocation(companyId, locationId);
+
+        mockMvc.perform(put("/api/v1/location/{locationId}", locationId)
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "editor-1")
+                                        .claim("tenant_id", companyId))
+                                .authorities(() -> "SCOPE_company:write"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name":"HQ Updated",
+                                  "locationCode":"HQ-1",
+                                  "timezone":"Europe/Berlin",
+                                  "countryCode":"D",
+                                  "regionCode":"DE-HB"
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void getCompanyAndLocationResponsesContainContactOwnerFields() throws Exception {
+        String companyId = UUID.randomUUID().toString();
+        String locationId = UUID.randomUUID().toString();
+        persistCompanyWithLocation(companyId, locationId);
+
+        mockMvc.perform(get("/api/v1/companies/{companyId}", companyId)
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "reader-1")
+                                        .claim("tenant_id", companyId))
+                                .authorities(() -> "SCOPE_company:read")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contactOwnerType").value("COMPANY"))
+                .andExpect(jsonPath("$.contactOwnerId").value(companyId));
+
+        mockMvc.perform(get("/api/v1/location/{locationId}", locationId)
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "reader-1")
+                                        .claim("tenant_id", companyId))
+                                .authorities(() -> "SCOPE_company:read")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contactOwnerType").value("LOCATION"))
+                .andExpect(jsonPath("$.contactOwnerId").value(locationId));
     }
 
     @Test

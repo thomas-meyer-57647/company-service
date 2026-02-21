@@ -10,6 +10,10 @@ import java.time.Instant;
 public record LocationResponse(
         @Schema(example = "4f8aa4a4-b4f2-4ec8-87d2-0f7dc4e7b8e2")
         String locationId,
+        @Schema(example = "LOCATION")
+        String contactOwnerType,
+        @Schema(example = "4f8aa4a4-b4f2-4ec8-87d2-0f7dc4e7b8e2")
+        String contactOwnerId,
         @Schema(example = "d290f1ee-6c54-4b01-90e6-d701748f0851")
         String companyId,
         @Schema(example = "Headquarters")
@@ -18,6 +22,10 @@ public record LocationResponse(
         String locationCode,
         @Schema(example = "Europe/Berlin")
         String timezone,
+        @Schema(example = "DE")
+        String countryCode,
+        @Schema(example = "BE")
+        String regionCode,
         LocationStatus status,
         Instant closedAt,
         String closedBy,
@@ -34,10 +42,14 @@ public record LocationResponse(
     public static LocationResponse from(LocationEntity entity) {
         return new LocationResponse(
                 entity.getLocationId(),
+                "LOCATION",
+                entity.getLocationId(),
                 entity.getCompanyId(),
                 entity.getName(),
                 entity.getLocationCode(),
                 entity.getTimezone(),
+                entity.getCountryCode(),
+                entity.getRegionCode(),
                 entity.getStatus(),
                 entity.getClosedAt(),
                 entity.getClosedBy(),

@@ -8,6 +8,10 @@ import java.time.Instant;
 public record CompanyResponse(
         @Schema(example = "d290f1ee-6c54-4b01-90e6-d701748f0851")
         String companyId,
+        @Schema(example = "COMPANY")
+        String contactOwnerType,
+        @Schema(example = "d290f1ee-6c54-4b01-90e6-d701748f0851")
+        String contactOwnerId,
         @Schema(example = "Acme Corporation")
         String name,
         @Schema(example = "ACME")
@@ -30,6 +34,8 @@ public record CompanyResponse(
 ) {
     public static CompanyResponse from(CompanyEntity entity) {
         return new CompanyResponse(
+                entity.getCompanyId(),
+                "COMPANY",
                 entity.getCompanyId(),
                 entity.getName(),
                 entity.getDisplayName(),

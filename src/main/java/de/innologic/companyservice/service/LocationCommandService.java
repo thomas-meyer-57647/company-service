@@ -10,6 +10,8 @@ import de.innologic.companyservice.persistence.entity.TrashedCause;
 import de.innologic.companyservice.persistence.repository.CompanyRepository;
 import de.innologic.companyservice.persistence.repository.LocationRepository;
 import java.time.Instant;
+import java.util.Locale;
+import java.util.regex.Pattern;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.security.access.AccessDeniedException;
@@ -18,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class LocationCommandService {
+    private static final Pattern COUNTRY_CODE_PATTERN = Pattern.compile("^[A-Za-z]{2}$");
 
     private final CompanyRepository companyRepository;
     private final LocationRepository locationRepository;
@@ -44,8 +47,13 @@ public class LocationCommandService {
             String name,
             String locationCode,
             String timezone,
+            String countryCode,
+            String regionCode,
             String modifiedBy
     ) {
+        String normalizedCountryCode = normalizeCountryCode(countryCode);
+        String normalizedRegionCode = normalizeRegionCode(regionCode);
+
         LocationEntity location = getActiveLocationForTenant(tenantId, locationId);
         String companyId = location.getCompanyId();
         CompanyEntity company = getActiveCompany(companyId);
@@ -54,6 +62,8 @@ public class LocationCommandService {
         location.setName(name);
         location.setLocationCode(locationCode);
         location.setTimezone(timezone);
+        location.setCountryCode(normalizedCountryCode);
+        location.setRegionCode(normalizedRegionCode);
         location.setModifiedAt(Instant.now());
         location.setModifiedBy(modifiedBy);
         return location;
@@ -227,5 +237,33 @@ public class LocationCommandService {
         if (open <= 0) {
             throw new ConflictException(ErrorCode.LAST_OPEN_LOCATION_REQUIRED, "At least one OPEN location is required");
         }
+    }
+
+    private String normalizeCountryCode(String countryCode) {
+        if (countryCode == null) {
+            return null;
+        }
+        String normalized = countryCode.trim();
+        if (normalized.isEmpty()) {
+            return null;
+        }
+        if (!COUNTRY_CODE_PATTERN.matcher(normalized).matches()) {
+            throw new IllegalArgumentException("countryCode must match ^[A-Za-z]{2}$");
+        }
+        return normalized.toUpperCase(Locale.ROOT);
+    }
+
+    private String normalizeRegionCode(String regionCode) {
+        if (regionCode == null) {
+            return null;
+        }
+        String normalized = regionCode.trim();
+        if (normalized.isEmpty()) {
+            return null;
+        }
+        if (normalized.length() > 32) {
+            throw new IllegalArgumentException("regionCode must be at most 32 characters");
+        }
+        return normalized.toUpperCase(Locale.ROOT);
     }
 }

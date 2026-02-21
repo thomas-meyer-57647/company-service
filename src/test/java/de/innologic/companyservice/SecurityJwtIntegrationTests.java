@@ -11,8 +11,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.security.autoconfigure.SecurityAutoConfiguration;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc; // bei dir korrekt
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.cache.CacheManager;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.oauth2.jwt.BadJwtException;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -30,7 +30,7 @@ import de.innologic.companyservice.service.CompanyQueryService;
 import de.innologic.companyservice.service.LocationCommandService;
 import de.innologic.companyservice.service.LocationQueryService;
 
-@WebMvcTest(controllers = LocationController.class)
+@WebMvcTest(controllers = { CompanyController.class, LocationController.class })
 @Import(SecurityConfig.class)
 @ImportAutoConfiguration(SecurityAutoConfiguration.class)
 class SecurityJwtIntegrationTests {
@@ -41,6 +41,11 @@ class SecurityJwtIntegrationTests {
     // verhindert issuer/jwk-set Pflicht und Netzwerkanfragen
     @MockitoBean
     private JwtDecoder jwtDecoder;
+
+    // WICHTIG: weil @EnableCaching (aus CompanyServiceApplication) aktiv ist, aber @WebMvcTest keinen CacheManager erstellt.
+    // Ein Mock reicht hier komplett aus, damit der ApplicationContext startet.
+    @MockitoBean
+    private CacheManager cacheManager;
 
     // CompanyController deps
     @MockitoBean private CompanyCommandService companyCommandService;
@@ -84,6 +89,7 @@ class SecurityJwtIntegrationTests {
                 .claim("sub", "user-1")
                 .claim("tenant_id", "company-1")
                 .claim("aud", List.of("company-service"))
+                // bewusst KEIN scope/scp claim -> soll forbidden ergeben
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(600))
                 .build();
@@ -103,6 +109,7 @@ class SecurityJwtIntegrationTests {
                 .claim("sub", "user-1")
                 .claim("tenant_id", "company-1")
                 .claim("aud", List.of("company-service"))
+                // bewusst KEIN scope/scp claim -> soll forbidden ergeben
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(600))
                 .build();
