@@ -6,18 +6,17 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import de.innologic.companyservice.persistence.entity.CompanyEntity;
 import de.innologic.companyservice.persistence.entity.LocationEntity;
 import de.innologic.companyservice.persistence.entity.LocationStatus;
-import de.innologic.companyservice.persistence.entity.TrashedCause;
 import de.innologic.companyservice.persistence.repository.CompanyRepository;
 import de.innologic.companyservice.persistence.repository.LocationRepository;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -28,6 +27,9 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
+
+// OPTIONAL (nur wenn du awaitility nutzen willst):
+// import static org.awaitility.Awaitility.await;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -42,6 +44,13 @@ class InvariantApiIntegrationTests {
 
     @Autowired
     private LocationRepository locationRepository;
+
+    @BeforeEach
+    void cleanup() {
+        // Reihenfolge ist wichtig, falls FK/Constraints existieren:
+        locationRepository.deleteAll();
+        companyRepository.deleteAll();
+    }
 
     @Test
     void closeMainReturnsConflictCannotCloseMainLocation() throws Exception {
@@ -100,17 +109,15 @@ class InvariantApiIntegrationTests {
         mockMvc.perform(delete("/api/v1/companies/{companyId}", f.companyId)
                         .with(jwtForCompany(f.companyId, "company:admin"))
                         .header("X-Company-Id", f.companyId))
-                .andExpect(status().isNoContent()); // falls dein Endpoint 202 liefert: hier anpassen
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.companyId").value(f.companyId))
+                .andExpect(jsonPath("$.state").isNotEmpty());
 
-        CompanyEntity company = companyRepository.findById(f.companyId).orElseThrow();
-        assertThat(company.getTrashedAt()).isNotNull();
+        // Company wurde hard deleted
+        assertThat(companyRepository.findById(f.companyId)).isEmpty();
 
-        assertThat(locationRepository.findAllByCompanyId(f.companyId))
-                .hasSize(2)
-                .allSatisfy(location -> {
-                    assertThat(location.getTrashedAt()).isNotNull();
-                    assertThat(location.getTrashedCause()).isEqualTo(TrashedCause.CASCADE);
-                });
+        // Locations wurden hard deleted
+        assertThat(locationRepository.findAllByCompanyId(f.companyId)).isEmpty();
     }
 
     @Test
@@ -120,7 +127,7 @@ class InvariantApiIntegrationTests {
     }
 
     /**
-     * Erzeugt ein Mock-JWT passend für deine Tenant-/Scope-Checks:
+     * Erzeugt ein Mock-JWT passend für Tenant-/Scope-Checks:
      * - tenant_id = companyId
      * - Authorities als SCOPE_... (z.B. "SCOPE_company:admin")
      */
@@ -130,9 +137,7 @@ class InvariantApiIntegrationTests {
                 .toArray(GrantedAuthority[]::new);
 
         return jwt()
-                .jwt(j -> j
-                        .subject("tester")
-                        .claim("tenant_id", companyId))
+                .jwt(j -> j.subject("tester").claim("tenant_id", companyId))
                 .authorities(auths);
     }
 
@@ -186,14 +191,15 @@ class InvariantApiIntegrationTests {
         location.setName(name);
         location.setStatus(status);
         location.setCreatedAt(now);
+
         if (status == LocationStatus.CLOSED) {
             location.setClosedAt(now);
             location.setClosedBy("test");
             location.setClosedReason("setup");
         }
+
         locationRepository.save(location);
     }
 
-    private record Fixture(String companyId, String mainLocationId, String secondaryLocationId) {
-    }
+    private record Fixture(String companyId, String mainLocationId, String secondaryLocationId) {}
 }

@@ -33,6 +33,12 @@ public class LocationEntity {
     @Column(name = "timezone", length = 64)
     private String timezone;
 
+    @Column(name = "country_code", length = 2)
+    private String countryCode;
+
+    @Column(name = "region_code", length = 32)
+    private String regionCode;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 16)
     private LocationStatus status;

@@ -11,6 +11,10 @@ public record LocationUpdateRequest(
         @Schema(example = "BER-01")
         String locationCode,
         @Schema(example = "Europe/Berlin")
-        String timezone
+        String timezone,
+        @Schema(example = "DE")
+        String countryCode,
+        @Schema(example = "BE")
+        String regionCode
 ) {
 }

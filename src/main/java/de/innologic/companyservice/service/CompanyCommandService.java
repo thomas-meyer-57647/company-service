@@ -18,6 +18,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -26,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class CompanyCommandService {
+    private static final Pattern COUNTRY_CODE_PATTERN = Pattern.compile("^[A-Za-z]{2}$");
 
     private final CompanyRepository companyRepository;
     private final LocationRepository locationRepository;
@@ -57,9 +59,14 @@ public class CompanyCommandService {
             String initialLocationName,
             String initialLocationCode,
             String initialLocationTimezone,
+            String initialLocationCountryCode,
+            String initialLocationRegionCode,
             String createdBy,
             String idempotencyKey
     ) {
+        String normalizedCountryCode = normalizeCountryCode(initialLocationCountryCode);
+        String normalizedRegionCode = normalizeRegionCode(initialLocationRegionCode);
+
         String normalizedKey = normalizeIdempotencyKey(idempotencyKey);
         String requestHash = null;
         if (normalizedKey != null) {
@@ -70,7 +77,9 @@ public class CompanyCommandService {
                     locale,
                     initialLocationName,
                     initialLocationCode,
-                    initialLocationTimezone
+                    initialLocationTimezone,
+                    normalizedCountryCode,
+                    normalizedRegionCode
             );
 
             BootstrapIdempotencyEntity existing = bootstrapIdempotencyRepository.findById(normalizedKey).orElse(null);
@@ -101,6 +110,8 @@ public class CompanyCommandService {
         location.setName(initialLocationName);
         location.setLocationCode(initialLocationCode);
         location.setTimezone(initialLocationTimezone);
+        location.setCountryCode(normalizedCountryCode);
+        location.setRegionCode(normalizedRegionCode);
         location.setStatus(LocationStatus.OPEN);
         location.setCreatedAt(now);
         location.setCreatedBy(createdBy);
@@ -156,7 +167,9 @@ public class CompanyCommandService {
             String locale,
             String initialLocationName,
             String initialLocationCode,
-            String initialLocationTimezone
+            String initialLocationTimezone,
+            String initialLocationCountryCode,
+            String initialLocationRegionCode
     ) {
         String canonicalPayload = canonical(name)
                 + "|" + canonical(displayName)
@@ -164,7 +177,9 @@ public class CompanyCommandService {
                 + "|" + canonical(locale)
                 + "|" + canonical(initialLocationName)
                 + "|" + canonical(initialLocationCode)
-                + "|" + canonical(initialLocationTimezone);
+                + "|" + canonical(initialLocationTimezone)
+                + "|" + canonical(initialLocationCountryCode)
+                + "|" + canonical(initialLocationRegionCode);
         return sha256(canonicalPayload);
     }
 
@@ -187,6 +202,34 @@ public class CompanyCommandService {
         } catch (NoSuchAlgorithmException ex) {
             throw new IllegalStateException("SHA-256 is not available", ex);
         }
+    }
+
+    private String normalizeCountryCode(String countryCode) {
+        if (countryCode == null) {
+            return null;
+        }
+        String normalized = countryCode.trim();
+        if (normalized.isEmpty()) {
+            return null;
+        }
+        if (!COUNTRY_CODE_PATTERN.matcher(normalized).matches()) {
+            throw new IllegalArgumentException("countryCode must match ^[A-Za-z]{2}$");
+        }
+        return normalized.toUpperCase(Locale.ROOT);
+    }
+
+    private String normalizeRegionCode(String regionCode) {
+        if (regionCode == null) {
+            return null;
+        }
+        String normalized = regionCode.trim();
+        if (normalized.isEmpty()) {
+            return null;
+        }
+        if (normalized.length() > 32) {
+            throw new IllegalArgumentException("regionCode must be at most 32 characters");
+        }
+        return normalized.toUpperCase(Locale.ROOT);
     }
 
     @Caching(evict = {
