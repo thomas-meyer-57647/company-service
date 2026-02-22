@@ -72,7 +72,11 @@ public class LocationController {
     }
 
     @PutMapping("/{locationId}")
-    @Operation(summary = "Update location", security = {@SecurityRequirement(name = "bearerAuth", scopes = {"company:write"})})
+    @Operation(
+            summary = "Update location",
+            description = "Partielles Update: Felder, die fehlen oder null sind, bleiben unverändert (null = ignore). Leere Strings bei countryCode/regionCode werden als Löschen interpretiert und zu null normalisiert.",
+            security = {@SecurityRequirement(name = "bearerAuth", scopes = {"company:write"})}
+    )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Location updated"),
             @ApiResponse(responseCode = "401", description = "Missing/invalid JWT", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),

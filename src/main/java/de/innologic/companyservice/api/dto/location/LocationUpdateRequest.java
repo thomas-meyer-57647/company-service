@@ -1,6 +1,8 @@
 package de.innologic.companyservice.api.dto.location;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.NotBlank;
 
 @Schema(description = "Request payload to update a location.")
@@ -13,8 +15,10 @@ public record LocationUpdateRequest(
         @Schema(example = "Europe/Berlin")
         String timezone,
         @Schema(example = "DE")
+        @Pattern(regexp = "^$|^[A-Z]{2}$", flags = Pattern.Flag.CASE_INSENSITIVE)
         String countryCode,
-        @Schema(example = "BE")
+        @Schema(example = "DE-HB")
+        @Size(max = 32)
         String regionCode
 ) {
 }

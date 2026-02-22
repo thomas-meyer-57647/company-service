@@ -51,9 +51,6 @@ public class LocationCommandService {
             String regionCode,
             String modifiedBy
     ) {
-        String normalizedCountryCode = normalizeCountryCode(countryCode);
-        String normalizedRegionCode = normalizeRegionCode(regionCode);
-
         LocationEntity location = getActiveLocationForTenant(tenantId, locationId);
         String companyId = location.getCompanyId();
         CompanyEntity company = getActiveCompany(companyId);
@@ -62,8 +59,12 @@ public class LocationCommandService {
         location.setName(name);
         location.setLocationCode(locationCode);
         location.setTimezone(timezone);
-        location.setCountryCode(normalizedCountryCode);
-        location.setRegionCode(normalizedRegionCode);
+        if (countryCode != null) {
+            location.setCountryCode(normalizeCountryCode(countryCode));
+        }
+        if (regionCode != null) {
+            location.setRegionCode(normalizeRegionCode(regionCode));
+        }
         location.setModifiedAt(Instant.now());
         location.setModifiedBy(modifiedBy);
         return location;
