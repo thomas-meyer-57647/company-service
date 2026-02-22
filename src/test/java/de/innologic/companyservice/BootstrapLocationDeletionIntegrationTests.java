@@ -166,10 +166,68 @@ class BootstrapLocationDeletionIntegrationTests {
     }
 
     @Test
+    void updateLocationWithoutCountryAndRegionKeepsExistingValues() throws Exception {
+        String companyId = UUID.randomUUID().toString();
+        String locationId = UUID.randomUUID().toString();
+        persistCompanyWithLocation(companyId, locationId, "DE", "DE-HB");
+
+        mockMvc.perform(put("/api/v1/location/{locationId}", locationId)
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "editor-1")
+                                        .claim("tenant_id", companyId))
+                                .authorities(() -> "SCOPE_company:write"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name":"HQ Updated",
+                                  "locationCode":"HQ-1",
+                                  "timezone":"Europe/Berlin"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.countryCode").value("DE"))
+                .andExpect(jsonPath("$.regionCode").value("DE-HB"));
+
+        LocationEntity updated = locationRepository.findById(locationId).orElseThrow();
+        assertThat(updated.getCountryCode()).isEqualTo("DE");
+        assertThat(updated.getRegionCode()).isEqualTo("DE-HB");
+    }
+
+    @Test
+    void updateLocationWithEmptyCountryAndRegionClearsValues() throws Exception {
+        String companyId = UUID.randomUUID().toString();
+        String locationId = UUID.randomUUID().toString();
+        persistCompanyWithLocation(companyId, locationId, "DE", "DE-HB");
+
+        mockMvc.perform(put("/api/v1/location/{locationId}", locationId)
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "editor-1")
+                                        .claim("tenant_id", companyId))
+                                .authorities(() -> "SCOPE_company:write"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name":"HQ Updated",
+                                  "locationCode":"HQ-1",
+                                  "timezone":"Europe/Berlin",
+                                  "countryCode":"",
+                                  "regionCode":""
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.countryCode").isEmpty())
+                .andExpect(jsonPath("$.regionCode").isEmpty());
+
+        LocationEntity updated = locationRepository.findById(locationId).orElseThrow();
+        assertThat(updated.getCountryCode()).isNull();
+        assertThat(updated.getRegionCode()).isNull();
+    }
+
+    @Test
     void updateLocationWithInvalidCountryCodeReturnsBadRequest() throws Exception {
         String companyId = UUID.randomUUID().toString();
         String locationId = UUID.randomUUID().toString();
-        persistCompanyWithLocation(companyId, locationId);
+        persistCompanyWithLocation(companyId, locationId, "DE", "DE-HB");
 
         mockMvc.perform(put("/api/v1/location/{locationId}", locationId)
                         .with(jwt().jwt(jwt -> jwt
@@ -257,6 +315,10 @@ class BootstrapLocationDeletionIntegrationTests {
     }
 
     private void persistCompanyWithLocation(String companyId, String locationId) {
+        persistCompanyWithLocation(companyId, locationId, null, null);
+    }
+
+    private void persistCompanyWithLocation(String companyId, String locationId, String countryCode, String regionCode) {
         Instant now = Instant.now();
 
         CompanyEntity company = new CompanyEntity();
@@ -273,6 +335,8 @@ class BootstrapLocationDeletionIntegrationTests {
         location.setLocationId(locationId);
         location.setCompanyId(companyId);
         location.setName("HQ");
+        location.setCountryCode(countryCode);
+        location.setRegionCode(regionCode);
         location.setStatus(LocationStatus.OPEN);
         location.setCreatedAt(now);
         location.setCreatedBy("seed");
