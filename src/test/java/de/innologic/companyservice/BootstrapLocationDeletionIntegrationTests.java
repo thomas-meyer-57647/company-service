@@ -72,7 +72,9 @@ class BootstrapLocationDeletionIntegrationTests {
     @Test
     void bootstrapCreateWithScopeCreateWithoutTenantIsAllowed() throws Exception {
         mockMvc.perform(post("/api/v1/companies")
-                        .with(jwt().jwt(jwt -> jwt.claim("sub", "auth-service"))
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "auth-service")
+                                        .claim("subject_type", "SERVICE"))
                                 .authorities(() -> "SCOPE_company:create"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -102,7 +104,9 @@ class BootstrapLocationDeletionIntegrationTests {
                 """;
 
         MvcResult first = mockMvc.perform(post("/api/v1/companies")
-                        .with(jwt().jwt(jwt -> jwt.claim("sub", "auth-service"))
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "auth-service")
+                                        .claim("subject_type", "SERVICE"))
                                 .authorities(() -> "SCOPE_company:create"))
                         .header("Idempotency-Key", "bootstrap-key-1")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -111,7 +115,9 @@ class BootstrapLocationDeletionIntegrationTests {
                 .andReturn();
 
         MvcResult second = mockMvc.perform(post("/api/v1/companies")
-                        .with(jwt().jwt(jwt -> jwt.claim("sub", "auth-service"))
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "auth-service")
+                                        .claim("subject_type", "SERVICE"))
                                 .authorities(() -> "SCOPE_company:create"))
                         .header("Idempotency-Key", "bootstrap-key-1")
                         .contentType(MediaType.APPLICATION_JSON)

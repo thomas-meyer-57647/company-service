@@ -1,12 +1,16 @@
 package de.innologic.companyservice;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Instant;
 import java.util.List;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
@@ -14,6 +18,8 @@ import org.springframework.boot.security.autoconfigure.SecurityAutoConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.cache.CacheManager;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.BadJwtException;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -27,6 +33,7 @@ import de.innologic.companyservice.config.SecurityConfig;
 import de.innologic.companyservice.service.CompanyCommandService;
 import de.innologic.companyservice.service.CompanyDeletionWorkflowService;
 import de.innologic.companyservice.service.CompanyQueryService;
+import de.innologic.companyservice.persistence.entity.CompanyEntity;
 import de.innologic.companyservice.service.LocationCommandService;
 import de.innologic.companyservice.service.LocationQueryService;
 
@@ -58,6 +65,33 @@ class SecurityJwtIntegrationTests {
 
     // beide Controller brauchen RequestContext
     @MockitoBean private RequestContext requestContext;
+
+    private static final String COMPANY_CREATE_PAYLOAD = """
+            {
+              "name": "Acme Corporation",
+              "displayName": "ACME",
+              "timezone": "Europe/Berlin",
+              "locale": "de-DE",
+              "initialLocation": {
+                "name": "Headquarters",
+                "locationCode": "HQ-BER",
+                "timezone": "Europe/Berlin",
+                "countryCode": "DE",
+                "regionCode": "BE"
+              }
+            }
+            """;
+
+    private final CompanyEntity companyEntity = createCompanyEntity();
+
+    @BeforeEach
+    void setupBootstrap() {
+        when(requestContext.subjectId()).thenReturn("auth-service");
+        when(companyCommandService.createCompany(
+                        any(), any(), any(), any(), any(),
+                        any(), any(), any(), any(), any(), any()))
+                .thenReturn(companyEntity);
+    }
 
     @Test
     void missingJwtReturnsUnauthorized_company() throws Exception {
@@ -119,5 +153,61 @@ class SecurityJwtIntegrationTests {
         mockMvc.perform(get("/api/v1/location/{locationId}", "loc-1")
                         .header("Authorization", "Bearer no-scope-token-2"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void bootstrapRequestWithProperClaimsIsCreated() throws Exception {
+        mockMvc.perform(post("/api/v1/companies")
+                        .with(jwt()
+                                .jwt(builder -> builder
+                                        .subject("auth-service")
+                                        .claim("subject_type", "SERVICE"))
+                                .authorities(new SimpleGrantedAuthority("SCOPE_company:create")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(COMPANY_CREATE_PAYLOAD))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void bootstrapRequestWithWrongSubjectTypeIsForbidden() throws Exception {
+        mockMvc.perform(post("/api/v1/companies")
+                        .with(jwt()
+                                .jwt(builder -> builder
+                                        .subject("auth-service")
+                                        .claim("subject_type", "USER"))
+                                .authorities(new SimpleGrantedAuthority("SCOPE_company:create")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(COMPANY_CREATE_PAYLOAD))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void bootstrapRequestWithWrongSubjectIsForbidden() throws Exception {
+        mockMvc.perform(post("/api/v1/companies")
+                        .with(jwt()
+                                .jwt(builder -> builder
+                                        .subject("other")
+                                        .claim("subject_type", "SERVICE"))
+                                .authorities(new SimpleGrantedAuthority("SCOPE_company:create")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(COMPANY_CREATE_PAYLOAD))
+                .andExpect(status().isForbidden());
+    }
+
+    private CompanyEntity createCompanyEntity() {
+        Instant now = Instant.now();
+        CompanyEntity entity = new CompanyEntity();
+        entity.setCompanyId("company-1");
+        entity.setName("Acme Corporation");
+        entity.setDisplayName("ACME");
+        entity.setTimezone("Europe/Berlin");
+        entity.setLocale("de-DE");
+        entity.setMainLocationId("loc-1");
+        entity.setCreatedAt(now);
+        entity.setCreatedBy("auth-service");
+        entity.setModifiedAt(now);
+        entity.setModifiedBy("auth-service");
+        entity.setVersion(1L);
+        return entity;
     }
 }
