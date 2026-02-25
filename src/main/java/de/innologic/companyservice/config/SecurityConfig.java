@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -54,7 +55,17 @@ public class SecurityConfig {
                                 "/actuator/info")
                         .permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/companies")
-                        .hasAuthority("SCOPE_company:create")
+                        .access((authentication, context) -> {
+                            Authentication token = authentication.get();
+                            if (!(token.getPrincipal() instanceof Jwt jwt)) {
+                                return new AuthorizationDecision(false);
+                            }
+                            boolean hasScope = token.getAuthorities().stream()
+                                    .map(GrantedAuthority::getAuthority)
+                                    .anyMatch("SCOPE_company:create"::equals);
+                            boolean isBootstrapService = isBootstrapService(jwt);
+                            return new AuthorizationDecision(hasScope && isBootstrapService);
+                        })
                         .requestMatchers(HttpMethod.GET, "/api/v1/companies/*")
                         .hasAuthority("SCOPE_company:read")
                         .requestMatchers(HttpMethod.GET, "/api/v1/companies/*/locations")
@@ -162,5 +173,10 @@ public class SecurityConfig {
             }
         }
         return false;
+    }
+
+    private boolean isBootstrapService(Jwt jwt) {
+        return "SERVICE".equals(jwt.getClaimAsString("subject_type"))
+                && "auth-service".equals(jwt.getSubject());
     }
 }
