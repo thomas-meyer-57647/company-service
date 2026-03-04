@@ -1,5 +1,6 @@
 package de.innologic.companyservice;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
@@ -7,12 +8,13 @@ import org.testcontainers.containers.MariaDBContainer;
 import org.testcontainers.utility.DockerImageName;
 
 @TestConfiguration(proxyBeanMethods = false)
+@ConditionalOnProperty(name = "test.db", havingValue = "tc")
 class TestcontainersConfiguration {
 
     @Bean
     @ServiceConnection
     MariaDBContainer<?> mariaDbContainer() {
-        return new MariaDBContainer<>(DockerImageName.parse("mariadb:latest"));
+        return new MariaDBContainer<>(DockerImageName.parse("mariadb:10.11"));
     }
 
 }

@@ -14,7 +14,7 @@ CREATE TABLE company (
     trashed_by VARCHAR(100) NULL,
     version BIGINT NOT NULL DEFAULT 0,
     CONSTRAINT pk_company PRIMARY KEY (company_id)
-) ENGINE=InnoDB;
+);
 
 CREATE TABLE location (
     location_id VARCHAR(36) NOT NULL,
@@ -39,7 +39,7 @@ CREATE TABLE location (
     CONSTRAINT chk_location_status CHECK (status IN ('OPEN', 'CLOSED')),
     CONSTRAINT chk_location_trashed_cause CHECK (trashed_cause IN ('MANUAL', 'CASCADE') OR trashed_cause IS NULL),
     CONSTRAINT uk_location_company_code UNIQUE (company_id, location_code)
-) ENGINE=InnoDB;
+);
 
 CREATE INDEX idx_location_company_id ON location (company_id);
 CREATE INDEX idx_location_company_status_trashed_at ON location (company_id, status, trashed_at);

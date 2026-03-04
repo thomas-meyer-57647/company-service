@@ -11,7 +11,7 @@ CREATE TABLE deletion_tombstone (
     CONSTRAINT pk_deletion_tombstone PRIMARY KEY (deletion_id),
     CONSTRAINT uk_deletion_tombstone_company UNIQUE (company_id),
     CONSTRAINT chk_deletion_tombstone_state CHECK (state IN ('IN_PROGRESS', 'FAILED', 'COMPLETED'))
-) ENGINE=InnoDB;
+);
 
 CREATE TABLE deletion_ack (
     deletion_id VARCHAR(36) NOT NULL,
@@ -20,7 +20,7 @@ CREATE TABLE deletion_ack (
     acked_by_sub VARCHAR(100) NOT NULL,
     CONSTRAINT pk_deletion_ack PRIMARY KEY (deletion_id, service_name),
     CONSTRAINT fk_deletion_ack_tombstone FOREIGN KEY (deletion_id) REFERENCES deletion_tombstone (deletion_id)
-) ENGINE=InnoDB;
+);
 
 CREATE INDEX idx_deletion_tombstone_state ON deletion_tombstone (state);
 CREATE INDEX idx_deletion_tombstone_idempotency_key ON deletion_tombstone (idempotency_key);
