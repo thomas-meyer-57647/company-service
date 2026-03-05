@@ -60,7 +60,7 @@ class InvariantApiIntegrationTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"maintenance\"}"))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.errorCode").value("CANNOT_CLOSE_MAIN_LOCATION"));
+                .andExpect(jsonPath("$.code").value("CANNOT_CLOSE_MAIN_LOCATION"));
     }
 
     @Test
@@ -71,7 +71,7 @@ class InvariantApiIntegrationTests {
                         .with(jwtForCompany(f.companyId, "company:admin"))
                         .header("X-Company-Id", f.companyId))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.errorCode").value("CANNOT_TRASH_MAIN_LOCATION"));
+                .andExpect(jsonPath("$.code").value("CANNOT_TRASH_MAIN_LOCATION"));
     }
 
     @Test
@@ -84,7 +84,7 @@ class InvariantApiIntegrationTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"maintenance\"}"))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.errorCode").value("LAST_OPEN_LOCATION_REQUIRED"));
+                .andExpect(jsonPath("$.code").value("LAST_OPEN_LOCATION_REQUIRED"));
     }
 
     @Test
@@ -97,7 +97,7 @@ class InvariantApiIntegrationTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"locationId\":\"" + f.secondaryLocationId + "\"}"))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.errorCode").value("MAIN_LOCATION_MUST_BE_OPEN"));
+                .andExpect(jsonPath("$.code").value("MAIN_LOCATION_MUST_BE_OPEN"));
     }
 
     @Test
