@@ -32,7 +32,7 @@ public class ApiAuthenticationEntryPoint implements AuthenticationEntryPoint {
                 request,
                 response,
                 HttpStatus.UNAUTHORIZED,
-                ErrorCode.UNAUTHORIZED,
+                ErrorCode.UNAUTHENTICATED,
                 authException.getMessage()
         );
     }

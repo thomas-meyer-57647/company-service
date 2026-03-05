@@ -5,6 +5,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Instant;
@@ -108,11 +109,13 @@ class SecurityJwtIntegrationTests {
     @Test
     void wrongAudienceTokenReturnsUnauthorized() throws Exception {
         when(jwtDecoder.decode("bad-aud-token"))
-                .thenThrow(new BadJwtException("Required audience 'company-service' is missing"));
+                .thenThrow(new BadJwtException("wrong audience"));
 
         mockMvc.perform(get("/companies/{companyId}", "company-1")
                         .header("Authorization", "Bearer bad-aud-token"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"))
+                .andExpect(jsonPath("$.message").value("wrong audience"));
     }
 
     @Test

@@ -1,5 +1,7 @@
 package de.innologic.companyservice.config;
 
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,7 +18,8 @@ import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtDecoders;
-import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.security.oauth2.jwt.JwtIssuerValidator;
+import org.springframework.security.oauth2.jwt.JwtTimestampValidator;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
@@ -33,8 +36,11 @@ public class SecurityConfig {
             "SCOPE_company:create"
     );
 
-    @Value("${app.security.required-audience:company-service}")
-    private String requiredAudience;
+    @Value("${security.jwt.audience:${SECURITY_JWT_AUDIENCE:company-service}}")
+    private String jwtAudience;
+
+    @Value("${security.jwt.clock-skew-seconds:${SECURITY_JWT_CLOCK_SKEW_SECONDS:60}}")
+    private long jwtClockSkewSeconds;
 
     @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri:}")
     private String issuerUri;
@@ -163,27 +169,25 @@ public class SecurityConfig {
 
     private OAuth2TokenValidator<Jwt> buildTokenValidator() {
         OAuth2TokenValidator<Jwt> audienceValidator = jwt -> {
-            if (jwt.getAudience() != null && jwt.getAudience().contains(requiredAudience)) {
+            if (jwt.getAudience() != null && jwt.getAudience().contains(jwtAudience)) {
                 return OAuth2TokenValidatorResult.success();
             }
             OAuth2Error error = new OAuth2Error(
                     "invalid_token",
-                    "Required audience '" + requiredAudience + "' is missing",
+                    "wrong audience",
                     null
             );
             return OAuth2TokenValidatorResult.failure(error);
         };
 
+        JwtTimestampValidator timestampValidator = new JwtTimestampValidator(Duration.ofSeconds(jwtClockSkewSeconds));
+        List<OAuth2TokenValidator<Jwt>> validators = new ArrayList<>();
+        validators.add(timestampValidator);
         if (StringUtils.hasText(issuerUri)) {
-            return new org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator<>(
-                    JwtValidators.createDefaultWithIssuer(issuerUri),
-                    audienceValidator
-            );
+            validators.add(new JwtIssuerValidator(issuerUri));
         }
-        return new org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator<>(
-                JwtValidators.createDefault(),
-                audienceValidator
-        );
+        validators.add(audienceValidator);
+        return new org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator<>(validators);
     }
 
     private boolean hasAnyCompanyScope(Collection<? extends GrantedAuthority> authorities) {
