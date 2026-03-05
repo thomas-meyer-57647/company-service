@@ -54,7 +54,7 @@ class InvariantApiIntegrationTests {
     void closeMainReturnsConflictCannotCloseMainLocation() throws Exception {
         Fixture f = fixtureWithMainAndSecondaryOpen();
 
-        mockMvc.perform(post("/api/v1/location/{locationId}/close", f.mainLocationId)
+        mockMvc.perform(post("/location/{locationId}/close", f.mainLocationId)
                         .with(jwtForCompany(f.companyId, "company:admin"))
                         .header("X-Company-Id", f.companyId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -67,7 +67,7 @@ class InvariantApiIntegrationTests {
     void trashMainReturnsConflictCannotTrashMainLocation() throws Exception {
         Fixture f = fixtureWithMainAndSecondaryOpen();
 
-        mockMvc.perform(delete("/api/v1/location/{locationId}", f.mainLocationId)
+        mockMvc.perform(delete("/location/{locationId}", f.mainLocationId)
                         .with(jwtForCompany(f.companyId, "company:admin"))
                         .header("X-Company-Id", f.companyId))
                 .andExpect(status().isConflict())
@@ -78,7 +78,7 @@ class InvariantApiIntegrationTests {
     void closeLastOpenReturnsConflictLastOpenLocationRequired() throws Exception {
         Fixture f = fixtureWithOnlyMainOpen();
 
-        mockMvc.perform(post("/api/v1/location/{locationId}/close", f.mainLocationId)
+        mockMvc.perform(post("/location/{locationId}/close", f.mainLocationId)
                         .with(jwtForCompany(f.companyId, "company:admin"))
                         .header("X-Company-Id", f.companyId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -91,7 +91,7 @@ class InvariantApiIntegrationTests {
     void setMainToClosedReturnsConflictMainLocationMustBeOpen() throws Exception {
         Fixture f = fixtureWithClosedSecondary();
 
-        mockMvc.perform(put("/api/v1/companies/{companyId}/main-location", f.companyId)
+        mockMvc.perform(put("/companies/{companyId}/main-location", f.companyId)
                         .with(jwtForCompany(f.companyId, "company:admin"))
                         .header("X-Company-Id", f.companyId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -104,7 +104,7 @@ class InvariantApiIntegrationTests {
     void trashCompanyCascadesLocationsToTrashedCauseCascade() throws Exception {
         Fixture f = fixtureWithMainAndSecondaryOpen();
 
-        mockMvc.perform(delete("/api/v1/companies/{companyId}", f.companyId)
+        mockMvc.perform(delete("/companies/{companyId}", f.companyId)
                         .with(jwtForCompany(f.companyId, "company:admin"))
                         .header("X-Company-Id", f.companyId))
                 .andExpect(status().isAccepted())

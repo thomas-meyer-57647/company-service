@@ -69,7 +69,7 @@ class BootstrapLocationDeletionIntegrationTests {
 
     @Test
     void bootstrapCreateWithScopeCreateWithoutTenantIsAllowed() throws Exception {
-        mockMvc.perform(post("/api/v1/companies")
+        mockMvc.perform(post("/companies")
                         .with(jwt().jwt(jwt -> jwt
                                         .claim("sub", "auth-service")
                                         .claim("subject_type", "SERVICE"))
@@ -101,7 +101,7 @@ class BootstrapLocationDeletionIntegrationTests {
                 }
                 """;
 
-        MvcResult first = mockMvc.perform(post("/api/v1/companies")
+        MvcResult first = mockMvc.perform(post("/companies")
                         .with(jwt().jwt(jwt -> jwt
                                         .claim("sub", "auth-service")
                                         .claim("subject_type", "SERVICE"))
@@ -112,7 +112,7 @@ class BootstrapLocationDeletionIntegrationTests {
                 .andExpect(status().isCreated())
                 .andReturn();
 
-        MvcResult second = mockMvc.perform(post("/api/v1/companies")
+        MvcResult second = mockMvc.perform(post("/companies")
                         .with(jwt().jwt(jwt -> jwt
                                         .claim("sub", "auth-service")
                                         .claim("subject_type", "SERVICE"))
@@ -135,7 +135,7 @@ class BootstrapLocationDeletionIntegrationTests {
         String locationId = UUID.randomUUID().toString();
         persistCompanyWithLocation(ownerCompany, locationId);
 
-        mockMvc.perform(get("/api/v1/location/{locationId}", locationId)
+        mockMvc.perform(get("/location/{locationId}", locationId)
                         .with(jwt().jwt(jwt -> jwt
                                         .claim("sub", "user-1")
                                         .claim("tenant_id", UUID.randomUUID().toString()))
@@ -149,7 +149,7 @@ class BootstrapLocationDeletionIntegrationTests {
         String locationId = UUID.randomUUID().toString();
         persistCompanyWithLocation(companyId, locationId);
 
-        mockMvc.perform(put("/api/v1/location/{locationId}", locationId)
+        mockMvc.perform(put("/location/{locationId}", locationId)
                         .with(jwt().jwt(jwt -> jwt
                                         .claim("sub", "editor-1")
                                         .claim("tenant_id", companyId))
@@ -175,7 +175,7 @@ class BootstrapLocationDeletionIntegrationTests {
         String locationId = UUID.randomUUID().toString();
         persistCompanyWithLocation(companyId, locationId, "DE", "DE-HB");
 
-        mockMvc.perform(put("/api/v1/location/{locationId}", locationId)
+        mockMvc.perform(put("/location/{locationId}", locationId)
                         .with(jwt().jwt(jwt -> jwt
                                         .claim("sub", "editor-1")
                                         .claim("tenant_id", companyId))
@@ -203,7 +203,7 @@ class BootstrapLocationDeletionIntegrationTests {
         String locationId = UUID.randomUUID().toString();
         persistCompanyWithLocation(companyId, locationId, "DE", "DE-HB");
 
-        mockMvc.perform(put("/api/v1/location/{locationId}", locationId)
+        mockMvc.perform(put("/location/{locationId}", locationId)
                         .with(jwt().jwt(jwt -> jwt
                                         .claim("sub", "editor-1")
                                         .claim("tenant_id", companyId))
@@ -233,7 +233,7 @@ class BootstrapLocationDeletionIntegrationTests {
         String locationId = UUID.randomUUID().toString();
         persistCompanyWithLocation(companyId, locationId, "DE", "DE-HB");
 
-        mockMvc.perform(put("/api/v1/location/{locationId}", locationId)
+        mockMvc.perform(put("/location/{locationId}", locationId)
                         .with(jwt().jwt(jwt -> jwt
                                         .claim("sub", "editor-1")
                                         .claim("tenant_id", companyId))
@@ -257,7 +257,7 @@ class BootstrapLocationDeletionIntegrationTests {
         String locationId = UUID.randomUUID().toString();
         persistCompanyWithLocation(companyId, locationId);
 
-        mockMvc.perform(get("/api/v1/companies/{companyId}", companyId)
+        mockMvc.perform(get("/companies/{companyId}", companyId)
                         .with(jwt().jwt(jwt -> jwt
                                         .claim("sub", "reader-1")
                                         .claim("tenant_id", companyId))
@@ -266,7 +266,7 @@ class BootstrapLocationDeletionIntegrationTests {
                 .andExpect(jsonPath("$.contactOwnerType").value("COMPANY"))
                 .andExpect(jsonPath("$.contactOwnerId").value(companyId));
 
-        mockMvc.perform(get("/api/v1/location/{locationId}", locationId)
+        mockMvc.perform(get("/location/{locationId}", locationId)
                         .with(jwt().jwt(jwt -> jwt
                                         .claim("sub", "reader-1")
                                         .claim("tenant_id", companyId))
@@ -282,7 +282,7 @@ class BootstrapLocationDeletionIntegrationTests {
         String locationId = UUID.randomUUID().toString();
         persistCompanyWithLocation(companyId, locationId);
 
-        mockMvc.perform(delete("/api/v1/companies/{companyId}", companyId)
+        mockMvc.perform(delete("/companies/{companyId}", companyId)
                         .with(jwt().jwt(jwt -> jwt
                                         .claim("sub", "admin-1")
                                         .claim("tenant_id", companyId))
@@ -292,14 +292,14 @@ class BootstrapLocationDeletionIntegrationTests {
                 .andExpect(jsonPath("$.deletionId").isNotEmpty())
                 .andExpect(jsonPath("$.state").value("IN_PROGRESS"));
 
-        mockMvc.perform(get("/api/v1/companies/{companyId}", companyId)
+        mockMvc.perform(get("/companies/{companyId}", companyId)
                         .with(jwt().jwt(jwt -> jwt
                                         .claim("sub", "reader-1")
                                         .claim("tenant_id", companyId))
                                 .authorities(() -> "SCOPE_company:read")))
                 .andExpect(status().isNotFound());
 
-        mockMvc.perform(post("/api/v1/companies/{companyId}/deletion-ack", companyId)
+        mockMvc.perform(post("/companies/{companyId}/deletion-ack", companyId)
                         .with(jwt().jwt(jwt -> jwt
                                         .claim("sub", "admin-1")
                                         .claim("tenant_id", companyId))

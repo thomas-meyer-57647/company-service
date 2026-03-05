@@ -32,7 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @Validated
-@RequestMapping("/api/v1/location")
+@RequestMapping("/location")
 @Tag(name = "Locations", description = "Location endpoints")
 public class LocationController {
 

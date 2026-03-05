@@ -95,13 +95,13 @@ class SecurityJwtIntegrationTests {
 
     @Test
     void missingJwtReturnsUnauthorized_company() throws Exception {
-        mockMvc.perform(get("/api/v1/companies/{companyId}", "company-1"))
+        mockMvc.perform(get("/companies/{companyId}", "company-1"))
                 .andExpect(status().isUnauthorized());
     }
 
     @Test
     void missingJwtReturnsUnauthorized_location() throws Exception {
-        mockMvc.perform(get("/api/v1/location/{locationId}", "loc-1"))
+        mockMvc.perform(get("/location/{locationId}", "loc-1"))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -110,7 +110,7 @@ class SecurityJwtIntegrationTests {
         when(jwtDecoder.decode("bad-aud-token"))
                 .thenThrow(new BadJwtException("Required audience 'company-service' is missing"));
 
-        mockMvc.perform(get("/api/v1/companies/{companyId}", "company-1")
+        mockMvc.perform(get("/companies/{companyId}", "company-1")
                         .header("Authorization", "Bearer bad-aud-token"))
                 .andExpect(status().isUnauthorized());
     }
@@ -130,7 +130,7 @@ class SecurityJwtIntegrationTests {
 
         when(jwtDecoder.decode("no-scope-token")).thenReturn(jwt);
 
-        mockMvc.perform(get("/api/v1/companies/{companyId}", "company-1")
+        mockMvc.perform(get("/companies/{companyId}", "company-1")
                         .header("Authorization", "Bearer no-scope-token"))
                 .andExpect(status().isForbidden());
     }
@@ -150,14 +150,14 @@ class SecurityJwtIntegrationTests {
 
         when(jwtDecoder.decode("no-scope-token-2")).thenReturn(jwt);
 
-        mockMvc.perform(get("/api/v1/location/{locationId}", "loc-1")
+        mockMvc.perform(get("/location/{locationId}", "loc-1")
                         .header("Authorization", "Bearer no-scope-token-2"))
                 .andExpect(status().isForbidden());
     }
 
     @Test
     void bootstrapRequestWithProperClaimsIsCreated() throws Exception {
-        mockMvc.perform(post("/api/v1/companies")
+        mockMvc.perform(post("/companies")
                         .with(jwt()
                                 .jwt(builder -> builder
                                         .subject("auth-service")
@@ -170,7 +170,7 @@ class SecurityJwtIntegrationTests {
 
     @Test
     void bootstrapRequestWithWrongSubjectTypeIsForbidden() throws Exception {
-        mockMvc.perform(post("/api/v1/companies")
+        mockMvc.perform(post("/companies")
                         .with(jwt()
                                 .jwt(builder -> builder
                                         .subject("auth-service")
@@ -183,7 +183,7 @@ class SecurityJwtIntegrationTests {
 
     @Test
     void bootstrapRequestWithWrongSubjectIsForbidden() throws Exception {
-        mockMvc.perform(post("/api/v1/companies")
+        mockMvc.perform(post("/companies")
                         .with(jwt()
                                 .jwt(builder -> builder
                                         .subject("other")
