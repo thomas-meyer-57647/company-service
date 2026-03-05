@@ -43,7 +43,12 @@ public class SecurityConfig {
     private String jwkSetUri;
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationConverter jwtAuthenticationConverter) throws Exception {
+    SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            JwtAuthenticationConverter jwtAuthenticationConverter,
+            ApiAuthenticationEntryPoint authenticationEntryPoint,
+            ApiAccessDeniedHandler accessDeniedHandler
+    ) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
@@ -107,8 +112,23 @@ public class SecurityConfig {
                             return new org.springframework.security.authorization.AuthorizationDecision(hasScope && hasTenant);
                         })
                         .anyRequest().authenticated())
-                .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)));
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(authenticationEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler))
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .authenticationEntryPoint(authenticationEntryPoint)
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)));
         return http.build();
+    }
+
+    @Bean
+    ApiAuthenticationEntryPoint apiAuthenticationEntryPoint() {
+        return new ApiAuthenticationEntryPoint();
+    }
+
+    @Bean
+    ApiAccessDeniedHandler apiAccessDeniedHandler() {
+        return new ApiAccessDeniedHandler();
     }
 
     @Bean
