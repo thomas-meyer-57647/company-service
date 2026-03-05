@@ -6,6 +6,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Instant;
@@ -135,7 +136,9 @@ class SecurityJwtIntegrationTests {
 
         mockMvc.perform(get("/companies/{companyId}", "company-1")
                         .header("Authorization", "Bearer no-scope-token"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"))
+                .andExpect(jsonPath("$.message").value("missing claim: scp"));
     }
 
     @Test
@@ -155,7 +158,54 @@ class SecurityJwtIntegrationTests {
 
         mockMvc.perform(get("/location/{locationId}", "loc-1")
                         .header("Authorization", "Bearer no-scope-token-2"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"))
+                .andExpect(jsonPath("$.message").value("missing claim: scp"));
+    }
+
+    @Test
+    void missingTenantIdReturnsUnauthorized() throws Exception {
+        Instant now = Instant.now();
+        Jwt jwt = Jwt.withTokenValue("no-tenant")
+                .header("alg", "RS256")
+                .claim("sub", "user-1")
+                .claim("subject_type", "USER")
+                .claim("scp", List.of("company:read"))
+                .claim("aud", List.of("company-service"))
+                .issuedAt(now)
+                .expiresAt(now.plusSeconds(600))
+                .build();
+
+        when(jwtDecoder.decode("no-tenant")).thenReturn(jwt);
+
+        mockMvc.perform(get("/companies/{companyId}", "company-1")
+                        .header("Authorization", "Bearer no-tenant"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"))
+                .andExpect(jsonPath("$.message").value("missing claim: tenant_id"));
+    }
+
+    @Test
+    void invalidSubjectTypeReturnsUnauthorized() throws Exception {
+        Instant now = Instant.now();
+        Jwt jwt = Jwt.withTokenValue("bad-subject")
+                .header("alg", "RS256")
+                .claim("sub", "user-1")
+                .claim("subject_type", "UNKNOWN")
+                .claim("tenant_id", "company-1")
+                .claim("scp", List.of("company:read"))
+                .claim("aud", List.of("company-service"))
+                .issuedAt(now)
+                .expiresAt(now.plusSeconds(600))
+                .build();
+
+        when(jwtDecoder.decode("bad-subject")).thenReturn(jwt);
+
+        mockMvc.perform(get("/companies/{companyId}", "company-1")
+                        .header("Authorization", "Bearer bad-subject"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"))
+                .andExpect(jsonPath("$.message").value("invalid subject_type"));
     }
 
     @Test
