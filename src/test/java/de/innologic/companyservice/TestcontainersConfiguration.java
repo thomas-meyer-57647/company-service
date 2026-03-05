@@ -8,7 +8,7 @@ import org.testcontainers.containers.MariaDBContainer;
 import org.testcontainers.utility.DockerImageName;
 
 @TestConfiguration(proxyBeanMethods = false)
-@ConditionalOnProperty(name = "test.db", havingValue = "tc")
+@ConditionalOnProperty(name = "test.db", havingValue = "tc", matchIfMissing = false)
 class TestcontainersConfiguration {
 
     @Bean
