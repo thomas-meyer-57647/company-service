@@ -3,6 +3,7 @@ package de.innologic.companyservice.api;
 import de.innologic.companyservice.domain.DomainException;
 import de.innologic.companyservice.domain.ErrorCode;
 import de.innologic.companyservice.domain.ResourceNotFoundException;
+import de.innologic.companyservice.config.CorrelationIdFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import java.util.ArrayList;
@@ -81,9 +82,9 @@ public class GlobalExceptionHandler {
     }
 
     private String correlationId(HttpServletRequest request) {
-        String header = request.getHeader("X-Correlation-Id");
-        if (header != null && !header.isBlank()) {
-            return header;
+        String correlationId = CorrelationIdFilter.read(request);
+        if (correlationId != null && !correlationId.isBlank()) {
+            return correlationId;
         }
         return UUID.randomUUID().toString();
     }
