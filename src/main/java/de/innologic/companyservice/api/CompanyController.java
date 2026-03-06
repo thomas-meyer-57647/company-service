@@ -13,7 +13,10 @@ import de.innologic.companyservice.api.dto.company.UpdateLogoRequest;
 import de.innologic.companyservice.api.dto.location.LocationCreateRequest;
 import de.innologic.companyservice.api.dto.location.LocationResponse;
 import de.innologic.companyservice.config.RequestContext;
+import de.innologic.companyservice.persistence.entity.DeletionTombstoneEntity;
 import de.innologic.companyservice.persistence.entity.LocationStatus;
+import de.innologic.companyservice.domain.ResourceNotFoundException;
+import de.innologic.companyservice.persistence.repository.DeletionTombstoneRepository;
 import de.innologic.companyservice.service.CompanyCommandService;
 import de.innologic.companyservice.service.CompanyDeletionWorkflowService;
 import de.innologic.companyservice.service.CompanyQueryService;
@@ -55,6 +58,7 @@ public class CompanyController {
     private final CompanyQueryService companyQueryService;
     private final CompanyDeletionWorkflowService companyDeletionWorkflowService;
     private final LocationCommandService locationCommandService;
+    private final DeletionTombstoneRepository deletionTombstoneRepository;
     private final RequestContext requestContext;
 
     public CompanyController(
@@ -62,12 +66,14 @@ public class CompanyController {
             CompanyQueryService companyQueryService,
             CompanyDeletionWorkflowService companyDeletionWorkflowService,
             LocationCommandService locationCommandService,
+            DeletionTombstoneRepository deletionTombstoneRepository,
             RequestContext requestContext
     ) {
         this.companyCommandService = companyCommandService;
         this.companyQueryService = companyQueryService;
         this.companyDeletionWorkflowService = companyDeletionWorkflowService;
         this.locationCommandService = locationCommandService;
+        this.deletionTombstoneRepository = deletionTombstoneRepository;
         this.requestContext = requestContext;
     }
 
@@ -301,6 +307,25 @@ public class CompanyController {
                 .body(CompanyDeletionResponse.from(
                         companyDeletionWorkflowService.startDeletion(companyId, requestContext.subjectId(), idempotencyKey)
                 ));
+    }
+
+    @GetMapping("/{companyId}/deletion-status")
+    @Operation(
+            summary = "Get deletion status",
+            description = "Returns the current deletion workflow status for the company.",
+            security = {@SecurityRequirement(name = "bearerAuth", scopes = {"company:read"})}
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Deletion status returned"),
+            @ApiResponse(responseCode = "401", description = "Missing/invalid JWT", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Missing scope or tenant mismatch", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "No deletion workflow found", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public CompanyDeletionResponse getDeletionStatus(@PathVariable String companyId) {
+        requestContext.assertTenantAccess(companyId);
+        DeletionTombstoneEntity tombstone = deletionTombstoneRepository.findByCompanyId(companyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Deletion workflow not found for company: " + companyId));
+        return CompanyDeletionResponse.from(tombstone);
     }
 
     @PostMapping("/{companyId}/deletion-ack")

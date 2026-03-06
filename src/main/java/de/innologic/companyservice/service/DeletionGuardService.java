@@ -16,7 +16,13 @@ public class DeletionGuardService {
 
     public void assertCompanyAccessible(String companyId) {
         if (deletionTombstoneRepository.existsByCompanyIdAndState(companyId, DeletionState.IN_PROGRESS)) {
-            throw new ResourceNotFoundException("Company not found: " + companyId);
+            throw new CompanyDeletionInProgressException(companyId);
+        }
+    }
+
+    public static final class CompanyDeletionInProgressException extends ResourceNotFoundException {
+        private CompanyDeletionInProgressException(String companyId) {
+            super("Company deletion in progress: " + companyId);
         }
     }
 }

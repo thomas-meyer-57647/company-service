@@ -39,6 +39,7 @@ import de.innologic.companyservice.service.CompanyCommandService;
 import de.innologic.companyservice.service.CompanyDeletionWorkflowService;
 import de.innologic.companyservice.service.CompanyQueryService;
 import de.innologic.companyservice.persistence.entity.CompanyEntity;
+import de.innologic.companyservice.persistence.repository.DeletionTombstoneRepository;
 import de.innologic.companyservice.service.LocationCommandService;
 import de.innologic.companyservice.service.LocationQueryService;
 
@@ -63,6 +64,7 @@ class SecurityJwtIntegrationTests {
     @MockitoBean private CompanyCommandService companyCommandService;
     @MockitoBean private CompanyQueryService companyQueryService;
     @MockitoBean private CompanyDeletionWorkflowService companyDeletionWorkflowService;
+    @MockitoBean private DeletionTombstoneRepository deletionTombstoneRepository;
 
     // LocationController deps
     @MockitoBean private LocationQueryService locationQueryService;
