@@ -193,6 +193,40 @@ class SecurityJwtIntegrationTests {
     }
 
     @Test
+    void restoreEndpointRequiresAdminScope() throws Exception {
+        mockMvc.perform(post("/companies/{companyId}/restore", "company-1")
+                        .with(jwt()
+                                .jwt(builder -> builder
+                                        .subject("user-1")
+                                        .claim("tenant_id", "company-1")
+                                        .claim("subject_type", "USER")
+                                        .claim("aud", List.of("company-service"))
+                                        .claim("scp", List.of("company:read"))
+                                        .claim("scope", List.of("company:read")))
+                                .authorities(new SimpleGrantedAuthority("SCOPE_company:read"))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("SCOPE_MISSING"))
+                .andExpect(jsonPath("$.message").value("Required scope is missing"));
+    }
+
+    @Test
+    void deletionAckEndpointRequiresAdminScope() throws Exception {
+        mockMvc.perform(post("/companies/{companyId}/deletion-ack", "company-1")
+                        .with(jwt()
+                                .jwt(builder -> builder
+                                        .subject("user-1")
+                                        .claim("tenant_id", "company-1")
+                                        .claim("subject_type", "USER")
+                                        .claim("aud", List.of("company-service"))
+                                        .claim("scp", List.of("company:write"))
+                                        .claim("scope", List.of("company:write")))
+                                .authorities(new SimpleGrantedAuthority("SCOPE_company:write"))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("SCOPE_MISSING"))
+                .andExpect(jsonPath("$.message").value("Required scope is missing"));
+    }
+
+    @Test
     void missingTenantIdReturnsUnauthorized() throws Exception {
         Instant now = Instant.now();
         Jwt jwt = Jwt.withTokenValue("no-tenant")
