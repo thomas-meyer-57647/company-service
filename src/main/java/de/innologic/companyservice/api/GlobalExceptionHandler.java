@@ -2,6 +2,7 @@ package de.innologic.companyservice.api;
 
 import de.innologic.companyservice.domain.DomainException;
 import de.innologic.companyservice.domain.ErrorCode;
+import de.innologic.companyservice.domain.LocationNotFoundException;
 import de.innologic.companyservice.domain.ResourceNotFoundException;
 import de.innologic.companyservice.config.CorrelationIdFilter;
 import de.innologic.companyservice.config.SecurityConfig.ScopeAuthorizationManager.ScopeMissingException;
@@ -72,7 +73,10 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ResourceNotFoundException.class)
     ResponseEntity<ErrorResponse> handleNotFound(ResourceNotFoundException ex, HttpServletRequest request) {
-        return build(HttpStatus.NOT_FOUND, ErrorCode.RESOURCE_NOT_FOUND, ex.getMessage(), request, List.of());
+        ErrorCode errorCode = ex instanceof LocationNotFoundException
+                ? ErrorCode.LOCATION_NOT_FOUND
+                : ErrorCode.RESOURCE_NOT_FOUND;
+        return build(HttpStatus.NOT_FOUND, errorCode, ex.getMessage(), request, List.of());
     }
 
     @ExceptionHandler(DomainException.class)
