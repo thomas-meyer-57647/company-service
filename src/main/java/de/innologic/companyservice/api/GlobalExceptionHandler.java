@@ -64,8 +64,10 @@ public class GlobalExceptionHandler {
         if (!StringUtils.hasText(message)) {
             return false;
         }
-        return message.toLowerCase(Locale.ROOT).contains("tenant_id")
-                || message.toLowerCase(Locale.ROOT).contains("x-company-id");
+        String lowered = message.toLowerCase(Locale.ROOT);
+        return lowered.contains("tenant_id")
+                || lowered.contains("x-company-id")
+                || lowered.contains("tenant mismatch");
     }
 
     @ExceptionHandler(ResourceNotFoundException.class)

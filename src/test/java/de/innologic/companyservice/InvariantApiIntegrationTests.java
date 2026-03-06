@@ -56,7 +56,7 @@ class InvariantApiIntegrationTests {
 
         mockMvc.perform(post("/location/{locationId}/close", f.mainLocationId)
                         .with(jwtForCompany(f.companyId, "company:admin"))
-                        .header("X-Company-Id", f.companyId)
+                        .header("X-Tenant-Id", f.companyId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"maintenance\"}"))
                 .andExpect(status().isConflict())
@@ -69,7 +69,7 @@ class InvariantApiIntegrationTests {
 
         mockMvc.perform(delete("/location/{locationId}", f.mainLocationId)
                         .with(jwtForCompany(f.companyId, "company:admin"))
-                        .header("X-Company-Id", f.companyId))
+                        .header("X-Tenant-Id", f.companyId))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("CANNOT_TRASH_MAIN_LOCATION"));
     }
@@ -80,7 +80,7 @@ class InvariantApiIntegrationTests {
 
         mockMvc.perform(post("/location/{locationId}/close", f.mainLocationId)
                         .with(jwtForCompany(f.companyId, "company:admin"))
-                        .header("X-Company-Id", f.companyId)
+                        .header("X-Tenant-Id", f.companyId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"maintenance\"}"))
                 .andExpect(status().isConflict())
@@ -93,7 +93,7 @@ class InvariantApiIntegrationTests {
 
         mockMvc.perform(put("/companies/{companyId}/main-location", f.companyId)
                         .with(jwtForCompany(f.companyId, "company:admin"))
-                        .header("X-Company-Id", f.companyId)
+                        .header("X-Tenant-Id", f.companyId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"locationId\":\"" + f.secondaryLocationId + "\"}"))
                 .andExpect(status().isConflict())
@@ -106,7 +106,7 @@ class InvariantApiIntegrationTests {
 
         mockMvc.perform(delete("/companies/{companyId}", f.companyId)
                         .with(jwtForCompany(f.companyId, "company:admin"))
-                        .header("X-Company-Id", f.companyId))
+                        .header("X-Tenant-Id", f.companyId))
                 .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$.companyId").value(f.companyId))
                 .andExpect(jsonPath("$.state").isNotEmpty());

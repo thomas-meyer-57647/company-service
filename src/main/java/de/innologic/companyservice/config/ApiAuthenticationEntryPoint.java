@@ -88,7 +88,9 @@ final class ApiAccessDeniedHandler implements AccessDeniedHandler {
             return false;
         }
         String normalized = message.toLowerCase(Locale.ROOT);
-        return normalized.contains("tenant_id") || normalized.contains("x-company-id");
+        return normalized.contains("tenant_id")
+                || normalized.contains("x-company-id")
+                || normalized.contains("tenant mismatch");
     }
 }
 
