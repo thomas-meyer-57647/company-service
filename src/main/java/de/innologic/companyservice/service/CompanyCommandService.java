@@ -3,6 +3,7 @@ package de.innologic.companyservice.service;
 import de.innologic.companyservice.domain.ConflictException;
 import de.innologic.companyservice.domain.ErrorCode;
 import de.innologic.companyservice.domain.ResourceNotFoundException;
+import de.innologic.companyservice.api.dto.company.CompanyUpdateRequest.CompanyPatchRequest;
 import de.innologic.companyservice.persistence.entity.BootstrapIdempotencyEntity;
 import de.innologic.companyservice.persistence.entity.CompanyEntity;
 import de.innologic.companyservice.persistence.entity.LocationEntity;
@@ -19,6 +20,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import java.util.Objects;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -243,14 +245,43 @@ public class CompanyCommandService {
             String displayName,
             String timezone,
             String locale,
+            Long version,
             String modifiedBy
     ) {
         CompanyEntity company = getActiveCompany(companyId);
+        assertVersion(version, company);
         Instant now = Instant.now();
         company.setName(name);
         company.setDisplayName(displayName);
         company.setTimezone(timezone);
         company.setLocale(locale);
+        company.setModifiedAt(now);
+        company.setModifiedBy(modifiedBy);
+        ensureMainLocationValid(company);
+        return company;
+    }
+
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "companiesById", key = "#companyId"),
+            @CacheEvict(cacheNames = "locationsByCompany", allEntries = true)
+    })
+    @Transactional
+    public CompanyEntity patchCompany(String companyId, CompanyPatchRequest request, String modifiedBy) {
+        CompanyEntity company = getActiveCompany(companyId);
+        assertVersion(request.version(), company);
+        Instant now = Instant.now();
+        if (request.name() != null) {
+            company.setName(request.name());
+        }
+        if (request.displayName() != null) {
+            company.setDisplayName(request.displayName());
+        }
+        if (request.timezone() != null) {
+            company.setTimezone(request.timezone());
+        }
+        if (request.locale() != null) {
+            company.setLocale(request.locale());
+        }
         company.setModifiedAt(now);
         company.setModifiedBy(modifiedBy);
         ensureMainLocationValid(company);
@@ -415,6 +446,12 @@ public class CompanyCommandService {
         long open = locationRepository.countByCompanyIdAndStatusAndTrashedAtIsNull(companyId, LocationStatus.OPEN);
         if (open <= 0) {
             throw new ConflictException(ErrorCode.LAST_OPEN_LOCATION_REQUIRED, "At least one OPEN location is required");
+        }
+    }
+
+    private void assertVersion(Long expectedVersion, CompanyEntity company) {
+        if (!Objects.equals(expectedVersion, company.getVersion())) {
+            throw new ConflictException(ErrorCode.VERSION_CONFLICT, "Version conflict");
         }
     }
 }

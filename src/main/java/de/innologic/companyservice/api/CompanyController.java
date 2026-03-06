@@ -4,6 +4,7 @@ import de.innologic.companyservice.api.dto.company.CompanyCreateRequest;
 import de.innologic.companyservice.api.dto.company.CompanyDeletionResponse;
 import de.innologic.companyservice.api.dto.company.CompanyResponse;
 import de.innologic.companyservice.api.dto.company.CompanyUpdateRequest;
+import de.innologic.companyservice.api.dto.company.CompanyUpdateRequest.CompanyPatchRequest;
 import de.innologic.companyservice.api.dto.company.DeletionAckRequest;
 import de.innologic.companyservice.api.dto.company.SetMainLocationRequest;
 import de.innologic.companyservice.api.dto.company.UpdateLogoRequest;
@@ -30,6 +31,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -153,8 +155,26 @@ public class CompanyController {
                 request.displayName(),
                 request.timezone(),
                 request.locale(),
+                request.version(),
                 requestContext.subjectId()
         ));
+    }
+
+    @PatchMapping("/{companyId}")
+    @Operation(summary = "Partial update company", security = {@SecurityRequirement(name = "bearerAuth", scopes = {"company:write"})})
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Company updated"),
+            @ApiResponse(responseCode = "401", description = "Missing/invalid JWT", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Missing scope or tenant mismatch", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Company not found", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "Version conflict", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public CompanyResponse patchCompany(
+            @PathVariable String companyId,
+            @Valid @RequestBody CompanyPatchRequest request
+    ) {
+        requestContext.assertTenantAccess(companyId);
+        return CompanyResponse.from(companyCommandService.patchCompany(companyId, request, requestContext.subjectId()));
     }
 
     @PutMapping("/{companyId}/main-location")
