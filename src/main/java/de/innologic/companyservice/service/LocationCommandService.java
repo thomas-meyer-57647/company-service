@@ -142,19 +142,21 @@ public class LocationCommandService {
         LocationEntity location = getActiveLocationForTenant(tenantId, locationId);
         String companyId = location.getCompanyId();
         CompanyEntity company = getActiveCompany(companyId);
-        ensureMainLocationValid(company);
+        boolean isHeadquarter = locationId.equals(company.getMainLocationId());
 
         if (location.getStatus() == LocationStatus.OPEN) {
             long openCount = locationRepository.countByCompanyIdAndStatusAndTrashedAtIsNull(companyId, LocationStatus.OPEN);
-            if (openCount <= 1) {
+            if (openCount <= 1 && !isHeadquarter) {
                 throw new ConflictException(
                         ErrorCode.LAST_OPEN_LOCATION_REQUIRED,
-                        "The last OPEN location cannot be closed"
+                        "At least one OPEN location is required"
                 );
             }
         }
-        if (locationId.equals(company.getMainLocationId())) {
-            throw new ConflictException(ErrorCode.CANNOT_CLOSE_MAIN_LOCATION, "Main location cannot be closed");
+        ensureMainLocationValid(company);
+
+        if (isHeadquarter) {
+            throw new ConflictException(ErrorCode.CANNOT_CLOSE_HEADQUARTER, "Headquarter cannot be closed");
         }
         if (location.getStatus() == LocationStatus.CLOSED) {
             return location;
