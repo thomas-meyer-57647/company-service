@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -142,6 +143,58 @@ class BootstrapLocationDeletionIntegrationTests {
                                         .claim("subject_type", "USER"))
                                 .authorities(() -> "SCOPE_company:read")))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void patchCompanyUpdatesFieldsWhenVersionMatches() throws Exception {
+        String companyId = UUID.randomUUID().toString();
+        String locationId = UUID.randomUUID().toString();
+        persistCompanyWithLocation(companyId, locationId);
+        CompanyEntity company = companyRepository.findById(companyId).orElseThrow();
+
+        mockMvc.perform(patch("/companies/{companyId}", companyId)
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "editor-1")
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
+                                .authorities(() -> "SCOPE_company:write"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "displayName":"Patched",
+                                  "timezone":"Europe/London",
+                                  "version":%d
+                                }
+                                """.formatted(company.getVersion())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.displayName").value("Patched"))
+                .andExpect(jsonPath("$.timezone").value("Europe/London"))
+                .andExpect(jsonPath("$.companyId").value(companyId));
+    }
+
+    @Test
+    void patchCompanyVersionMismatchReturnsConflict() throws Exception {
+        String companyId = UUID.randomUUID().toString();
+        String locationId = UUID.randomUUID().toString();
+        persistCompanyWithLocation(companyId, locationId);
+        CompanyEntity company = companyRepository.findById(companyId).orElseThrow();
+
+        mockMvc.perform(patch("/companies/{companyId}", companyId)
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "editor-2")
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
+                                .authorities(() -> "SCOPE_company:write"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "locale":"en-GB",
+                                  "version":%d
+                                }
+                                """.formatted(company.getVersion() + 1)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"))
+                .andExpect(jsonPath("$.message").value("Version conflict"));
     }
 
     @Test
