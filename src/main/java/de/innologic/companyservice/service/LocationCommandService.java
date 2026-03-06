@@ -4,6 +4,7 @@ import de.innologic.companyservice.domain.ConflictException;
 import de.innologic.companyservice.domain.ErrorCode;
 import de.innologic.companyservice.domain.ResourceNotFoundException;
 import de.innologic.companyservice.api.dto.location.LocationCreateRequest;
+import de.innologic.companyservice.api.dto.location.LocationUpdateRequest.LocationPatchRequest;
 import de.innologic.companyservice.persistence.entity.CompanyEntity;
 import de.innologic.companyservice.persistence.entity.LocationEntity;
 import de.innologic.companyservice.persistence.entity.LocationStatus;
@@ -12,6 +13,7 @@ import de.innologic.companyservice.persistence.repository.CompanyRepository;
 import de.innologic.companyservice.persistence.repository.LocationRepository;
 import java.time.Instant;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.cache.annotation.CacheEvict;
@@ -51,9 +53,11 @@ public class LocationCommandService {
             String timezone,
             String countryCode,
             String regionCode,
+            Long version,
             String modifiedBy
     ) {
         LocationEntity location = getActiveLocationForTenant(tenantId, locationId);
+        assertVersion(version, location);
         String companyId = location.getCompanyId();
         CompanyEntity company = getActiveCompany(companyId);
         ensureMainLocationValid(company);
@@ -66,6 +70,38 @@ public class LocationCommandService {
         }
         if (regionCode != null) {
             location.setRegionCode(normalizeRegionCode(regionCode));
+        }
+        location.setModifiedAt(Instant.now());
+        location.setModifiedBy(modifiedBy);
+        return location;
+    }
+
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "companiesById", key = "#tenantId"),
+            @CacheEvict(cacheNames = "locationsByCompany", allEntries = true)
+    })
+    @Transactional
+    public LocationEntity patchLocation(String tenantId, String locationId, LocationPatchRequest request, String modifiedBy) {
+        LocationEntity location = getActiveLocationForTenant(tenantId, locationId);
+        assertVersion(request.version(), location);
+        String companyId = location.getCompanyId();
+        CompanyEntity company = getActiveCompany(companyId);
+        ensureMainLocationValid(company);
+
+        if (request.name() != null) {
+            location.setName(request.name());
+        }
+        if (request.locationCode() != null) {
+            location.setLocationCode(request.locationCode());
+        }
+        if (request.timezone() != null) {
+            location.setTimezone(request.timezone());
+        }
+        if (request.countryCode() != null) {
+            location.setCountryCode(normalizeCountryCode(request.countryCode()));
+        }
+        if (request.regionCode() != null) {
+            location.setRegionCode(normalizeRegionCode(request.regionCode()));
         }
         location.setModifiedAt(Instant.now());
         location.setModifiedBy(modifiedBy);
@@ -322,6 +358,12 @@ public class LocationCommandService {
 
         public String getErrorCode() {
             return errorCode;
+        }
+    }
+
+    private void assertVersion(Long expected, LocationEntity location) {
+        if (!Objects.equals(expected, location.getVersion())) {
+            throw new ConflictException(ErrorCode.VERSION_CONFLICT, "Version conflict");
         }
     }
 }

@@ -3,6 +3,8 @@ package de.innologic.companyservice.api;
 import de.innologic.companyservice.api.dto.location.CloseLocationRequest;
 import de.innologic.companyservice.api.dto.location.LocationResponse;
 import de.innologic.companyservice.api.dto.location.LocationUpdateRequest;
+import de.innologic.companyservice.api.dto.location.LocationUpdateRequest;
+import de.innologic.companyservice.api.dto.location.LocationUpdateRequest;
 import de.innologic.companyservice.config.RequestContext;
 import de.innologic.companyservice.service.LocationCommandService;
 import de.innologic.companyservice.service.LocationQueryService;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -98,6 +101,30 @@ public class LocationController {
                 request.timezone(),
                 request.countryCode(),
                 request.regionCode(),
+                request.version(),
+                requestContext.subjectId()
+        ));
+    }
+
+    @PatchMapping("/{locationId}")
+    @Operation(summary = "Partial update location", security = {@SecurityRequirement(name = "bearerAuth", scopes = {"company:write"})})
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Location updated", content = @Content(schema = @Schema(implementation = LocationResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Missing/invalid JWT", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Missing scope or tenant mismatch", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Location not found", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "Version conflict", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public LocationResponse patchLocation(
+            @PathVariable String locationId,
+            @RequestHeader(name = "X-Tenant-Id", required = false) String tenantIdHeader,
+            @Valid @RequestBody LocationUpdateRequest.LocationPatchRequest request
+    ) {
+        requestContext.assertTenantHeaderMatches(tenantIdHeader);
+        return LocationResponse.from(locationCommandService.patchLocation(
+                resolveTenantId(tenantIdHeader),
+                locationId,
+                request,
                 requestContext.subjectId()
         ));
     }
