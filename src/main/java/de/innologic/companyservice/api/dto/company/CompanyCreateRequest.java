@@ -7,17 +7,18 @@ import jakarta.validation.constraints.NotNull;
 
 @Schema(description = "Request payload to create a company with its initial location.")
 public record CompanyCreateRequest(
-        @Schema(example = "Acme Corporation")
-        @NotBlank
-        String name,
-        @Schema(example = "ACME")
-        String displayName,
-        @Schema(example = "Europe/Berlin")
-        String timezone,
-        @Schema(example = "de-DE")
-        String locale,
-        @Valid
-        @NotNull
-        InitialLocationRequest initialLocation
+    @Schema(description = "Official legal name of the company", example = "Acme Corporation")
+    @NotBlank
+    String name,
+    @Schema(description = "Preferred short display name", example = "ACME")
+    String displayName,
+    @Schema(description = "Timezone identifier for the company", example = "Europe/Berlin")
+    String timezone,
+    @Schema(description = "Locale tag used for formatting", example = "de-DE")
+    String locale,
+    @Schema(description = "Initial location that will serve as headquarter")
+    @Valid
+    @NotNull
+    InitialLocationRequest initialLocation
 ) {
 }
