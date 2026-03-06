@@ -33,8 +33,18 @@ public class ApiAuthenticationEntryPoint implements AuthenticationEntryPoint {
                 response,
                 HttpStatus.UNAUTHORIZED,
                 ErrorCode.UNAUTHENTICATED,
-                authException.getMessage()
+                resolveMessage(authException)
         );
+    }
+
+    private static final String AUTHENTICATION_REQUIRED_MESSAGE = "Authentication required";
+
+    private static String resolveMessage(AuthenticationException exception) {
+        String candidate = exception.getMessage();
+        if (StringUtils.hasText(candidate) && !candidate.contains("Full authentication is required")) {
+            return candidate;
+        }
+        return AUTHENTICATION_REQUIRED_MESSAGE;
     }
 }
 

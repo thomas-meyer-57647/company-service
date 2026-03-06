@@ -138,7 +138,8 @@ class BootstrapLocationDeletionIntegrationTests {
         mockMvc.perform(get("/location/{locationId}", locationId)
                         .with(jwt().jwt(jwt -> jwt
                                         .claim("sub", "user-1")
-                                        .claim("tenant_id", UUID.randomUUID().toString()))
+                                        .claim("tenant_id", UUID.randomUUID().toString())
+                                        .claim("subject_type", "USER"))
                                 .authorities(() -> "SCOPE_company:read")))
                 .andExpect(status().isForbidden());
     }
@@ -152,7 +153,8 @@ class BootstrapLocationDeletionIntegrationTests {
         mockMvc.perform(put("/location/{locationId}", locationId)
                         .with(jwt().jwt(jwt -> jwt
                                         .claim("sub", "editor-1")
-                                        .claim("tenant_id", companyId))
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
                                 .authorities(() -> "SCOPE_company:write"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -178,7 +180,8 @@ class BootstrapLocationDeletionIntegrationTests {
         mockMvc.perform(put("/location/{locationId}", locationId)
                         .with(jwt().jwt(jwt -> jwt
                                         .claim("sub", "editor-1")
-                                        .claim("tenant_id", companyId))
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
                                 .authorities(() -> "SCOPE_company:write"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -206,7 +209,8 @@ class BootstrapLocationDeletionIntegrationTests {
         mockMvc.perform(put("/location/{locationId}", locationId)
                         .with(jwt().jwt(jwt -> jwt
                                         .claim("sub", "editor-1")
-                                        .claim("tenant_id", companyId))
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
                                 .authorities(() -> "SCOPE_company:write"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -236,7 +240,8 @@ class BootstrapLocationDeletionIntegrationTests {
         mockMvc.perform(put("/location/{locationId}", locationId)
                         .with(jwt().jwt(jwt -> jwt
                                         .claim("sub", "editor-1")
-                                        .claim("tenant_id", companyId))
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
                                 .authorities(() -> "SCOPE_company:write"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -260,7 +265,8 @@ class BootstrapLocationDeletionIntegrationTests {
         mockMvc.perform(get("/companies/{companyId}", companyId)
                         .with(jwt().jwt(jwt -> jwt
                                         .claim("sub", "reader-1")
-                                        .claim("tenant_id", companyId))
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
                                 .authorities(() -> "SCOPE_company:read")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.contactOwnerType").value("COMPANY"))
@@ -269,7 +275,8 @@ class BootstrapLocationDeletionIntegrationTests {
         mockMvc.perform(get("/location/{locationId}", locationId)
                         .with(jwt().jwt(jwt -> jwt
                                         .claim("sub", "reader-1")
-                                        .claim("tenant_id", companyId))
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
                                 .authorities(() -> "SCOPE_company:read")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.contactOwnerType").value("LOCATION"))
@@ -285,7 +292,8 @@ class BootstrapLocationDeletionIntegrationTests {
         mockMvc.perform(delete("/companies/{companyId}", companyId)
                         .with(jwt().jwt(jwt -> jwt
                                         .claim("sub", "admin-1")
-                                        .claim("tenant_id", companyId))
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
                                 .authorities(() -> "SCOPE_company:admin"))
                         .header("Idempotency-Key", "delete-key-1"))
                 .andExpect(status().isAccepted())
@@ -295,14 +303,16 @@ class BootstrapLocationDeletionIntegrationTests {
         mockMvc.perform(get("/companies/{companyId}", companyId)
                         .with(jwt().jwt(jwt -> jwt
                                         .claim("sub", "reader-1")
-                                        .claim("tenant_id", companyId))
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
                                 .authorities(() -> "SCOPE_company:read")))
                 .andExpect(status().isNotFound());
 
         mockMvc.perform(post("/companies/{companyId}/deletion-ack", companyId)
                         .with(jwt().jwt(jwt -> jwt
                                         .claim("sub", "admin-1")
-                                        .claim("tenant_id", companyId))
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
                                 .authorities(() -> "SCOPE_company:admin"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"serviceName\":\"template-service\"}"))

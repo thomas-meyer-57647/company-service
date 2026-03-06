@@ -39,7 +39,7 @@ public class ClaimsValidationFilter extends OncePerRequestFilter {
         JwtAuthenticationToken token = (JwtAuthenticationToken) SecurityContextHolder.getContext().getAuthentication();
         Jwt jwt = token.getToken();
 
-        if (!isValidSubjectType(jwt)) {
+        if (!hasValidSubjectType(jwt)) {
             ApiErrorResponseSupport.writeErrorResponse(
                     request,
                     response,
@@ -75,9 +75,9 @@ public class ClaimsValidationFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
-    private boolean isValidSubjectType(Jwt jwt) {
+    private boolean hasValidSubjectType(Jwt jwt) {
         String subjectType = jwt.getClaimAsString("subject_type");
-        return !StringUtils.hasText(subjectType) || VALID_SUBJECT_TYPES.contains(subjectType);
+        return StringUtils.hasText(subjectType) && VALID_SUBJECT_TYPES.contains(subjectType);
     }
 
     private boolean hasScopeClaim(Jwt jwt) {
