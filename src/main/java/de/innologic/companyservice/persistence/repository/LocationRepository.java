@@ -22,6 +22,19 @@ public interface LocationRepository extends JpaRepository<LocationEntity, String
             Pageable pageable
     );
 
+    Page<LocationEntity> findAllByCompanyIdAndTrashedAtIsNullAndNameContainingIgnoreCase(
+            String companyId,
+            String name,
+            Pageable pageable
+    );
+
+    Page<LocationEntity> findAllByCompanyIdAndStatusAndTrashedAtIsNullAndNameContainingIgnoreCase(
+            String companyId,
+            LocationStatus status,
+            String name,
+            Pageable pageable
+    );
+
     long countByCompanyIdAndStatusAndTrashedAtIsNull(String companyId, LocationStatus status);
 
     List<LocationEntity> findAllByCompanyId(String companyId);

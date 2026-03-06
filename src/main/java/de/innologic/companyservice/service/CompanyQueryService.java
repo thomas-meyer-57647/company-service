@@ -11,6 +11,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 @Service
 public class CompanyQueryService {
@@ -47,12 +48,30 @@ public class CompanyQueryService {
             key = "#companyId + '|' + #status + '|' + #pageable.pageNumber + '|' + #pageable.pageSize + '|' + #pageable.sort"
     )
     @Transactional(readOnly = true)
-    public Page<LocationEntity> listActiveLocations(String companyId, LocationStatus status, Pageable pageable) {
+    public Page<LocationEntity> listActiveLocations(String companyId, LocationStatus status, String nameContains, Pageable pageable) {
         deletionGuardService.assertCompanyAccessible(companyId);
         getActiveCompany(companyId);
-        if (status == null) {
+        boolean hasNameFilter = StringUtils.hasText(nameContains);
+        String normalizedName = hasNameFilter ? nameContains.trim() : null;
+
+        if (status == null && !hasNameFilter) {
             return locationRepository.findAllByCompanyIdAndTrashedAtIsNull(companyId, pageable);
         }
-        return locationRepository.findAllByCompanyIdAndStatusAndTrashedAtIsNull(companyId, status, pageable);
+        if (status != null && !hasNameFilter) {
+            return locationRepository.findAllByCompanyIdAndStatusAndTrashedAtIsNull(companyId, status, pageable);
+        }
+        if (status == null) {
+            return locationRepository.findAllByCompanyIdAndTrashedAtIsNullAndNameContainingIgnoreCase(
+                    companyId,
+                    normalizedName,
+                    pageable
+            );
+        }
+        return locationRepository.findAllByCompanyIdAndStatusAndTrashedAtIsNullAndNameContainingIgnoreCase(
+                companyId,
+                status,
+                normalizedName,
+                pageable
+        );
     }
 }
