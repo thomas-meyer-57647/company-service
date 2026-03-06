@@ -2,6 +2,7 @@ package de.innologic.companyservice;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -51,7 +52,7 @@ class InvariantApiIntegrationTests {
     }
 
     @Test
-    void closeMainReturnsConflictCannotCloseMainLocation() throws Exception {
+    void closeHeadquarterReturnsConflictCannotCloseHeadquarter() throws Exception {
         Fixture f = fixtureWithMainAndSecondaryOpen();
 
         mockMvc.perform(post("/location/{locationId}/close", f.mainLocationId)
@@ -60,7 +61,43 @@ class InvariantApiIntegrationTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"maintenance\"}"))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("CANNOT_CLOSE_MAIN_LOCATION"));
+                .andExpect(jsonPath("$.code").value("CANNOT_CLOSE_HEADQUARTER"))
+                .andExpect(jsonPath("$.message").value("Headquarter cannot be closed"));
+    }
+
+    @Test
+    void closeSecondaryLocationSucceeds() throws Exception {
+        Fixture f = fixtureWithMainAndSecondaryOpen();
+
+        mockMvc.perform(post("/location/{locationId}/close", f.secondaryLocationId)
+                        .with(jwtForCompany(f.companyId, "company:admin"))
+                        .header("X-Tenant-Id", f.companyId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"maintenance\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CLOSED"))
+                .andExpect(jsonPath("$.closedReason").value("maintenance"))
+                .andExpect(jsonPath("$.closedBy").value("tester"));
+    }
+
+    @Test
+    void reopenLocationRestoresOpenStatus() throws Exception {
+        Fixture f = fixtureWithMainAndSecondaryOpen();
+
+        mockMvc.perform(post("/location/{locationId}/close", f.secondaryLocationId)
+                        .with(jwtForCompany(f.companyId, "company:admin"))
+                        .header("X-Tenant-Id", f.companyId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"maintenance\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/location/{locationId}/reopen", f.secondaryLocationId)
+                        .with(jwtForCompany(f.companyId, "company:write"))
+                        .header("X-Tenant-Id", f.companyId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("OPEN"))
+                .andExpect(jsonPath("$.closedReason").value(nullValue()))
+                .andExpect(jsonPath("$.closedAt").value(nullValue()));
     }
 
     @Test
@@ -76,15 +113,24 @@ class InvariantApiIntegrationTests {
 
     @Test
     void closeLastOpenReturnsConflictLastOpenLocationRequired() throws Exception {
-        Fixture f = fixtureWithOnlyMainOpen();
+        Fixture f = fixtureWithMainAndSecondaryOpen();
+        Instant now = Instant.now();
+        LocationEntity main = locationRepository.findById(f.mainLocationId).orElseThrow();
+        main.setStatus(LocationStatus.CLOSED);
+        main.setClosedAt(now);
+        main.setClosedBy("test");
+        main.setClosedReason("setup");
+        main.setModifiedAt(now);
+        locationRepository.save(main);
 
-        mockMvc.perform(post("/location/{locationId}/close", f.mainLocationId)
+        mockMvc.perform(post("/location/{locationId}/close", f.secondaryLocationId)
                         .with(jwtForCompany(f.companyId, "company:admin"))
                         .header("X-Tenant-Id", f.companyId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"maintenance\"}"))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("LAST_OPEN_LOCATION_REQUIRED"));
+                .andExpect(jsonPath("$.code").value("LAST_OPEN_LOCATION_REQUIRED"))
+                .andExpect(jsonPath("$.message").value("At least one OPEN location is required"));
     }
 
     @Test
