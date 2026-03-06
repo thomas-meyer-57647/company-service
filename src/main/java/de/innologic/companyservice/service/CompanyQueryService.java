@@ -37,6 +37,11 @@ public class CompanyQueryService {
                 .orElseThrow(() -> new ResourceNotFoundException("Company not found: " + companyId));
     }
 
+    @Transactional(readOnly = true)
+    public Page<CompanyEntity> listActiveCompanies(Pageable pageable) {
+        return companyRepository.findAllByTrashedAtIsNull(pageable);
+    }
+
     @Cacheable(
             cacheNames = "locationsByCompany",
             key = "#companyId + '|' + #status + '|' + #pageable.pageNumber + '|' + #pageable.pageSize + '|' + #pageable.sort"

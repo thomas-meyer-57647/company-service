@@ -85,6 +85,8 @@ public class SecurityConfig {
                             boolean isBootstrapService = isBootstrapService(jwt);
                             return new AuthorizationDecision(hasScope && isBootstrapService);
                         })
+                        .requestMatchers(HttpMethod.GET, "/companies")
+                        .access(scopeAuth("SCOPE_company:read"))
                         .requestMatchers(HttpMethod.GET, "/companies/*")
                         .access(scopeAuth("SCOPE_company:read"))
                         .requestMatchers(HttpMethod.GET, "/companies/*/locations")

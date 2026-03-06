@@ -119,6 +119,21 @@ public class CompanyController {
         return CompanyResponse.from(companyQueryService.getActiveCompany(companyId));
     }
 
+    @GetMapping
+    @Operation(
+            summary = "List companies",
+            description = "Returns a pageable list of active companies (trashed entries are excluded).",
+            security = {@SecurityRequirement(name = "bearerAuth", scopes = {"company:read"})}
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Companies listed"),
+            @ApiResponse(responseCode = "401", description = "Missing/invalid JWT", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Missing scope or tenant mismatch", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public Page<CompanyResponse> listCompanies(@ParameterObject Pageable pageable) {
+        return companyQueryService.listActiveCompanies(pageable).map(CompanyResponse::from);
+    }
+
     @PutMapping("/{companyId}")
     @Operation(summary = "Update company", security = {@SecurityRequirement(name = "bearerAuth", scopes = {"company:write"})})
     @ApiResponses({

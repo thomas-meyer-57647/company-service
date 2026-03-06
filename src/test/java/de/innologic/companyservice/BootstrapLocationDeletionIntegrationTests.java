@@ -145,6 +145,38 @@ class BootstrapLocationDeletionIntegrationTests {
     }
 
     @Test
+    void listCompaniesReturnsPage() throws Exception {
+        String companyId = UUID.randomUUID().toString();
+        String locationId = UUID.randomUUID().toString();
+        persistCompanyWithLocation(companyId, locationId);
+
+        mockMvc.perform(get("/companies")
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "reader-1")
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
+                                .authorities(() -> "SCOPE_company:read")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].companyId").value(companyId))
+                .andExpect(jsonPath("$.content[0].mainLocationId").value(locationId))
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
+    void listCompaniesWithoutScopeReturnsScopeMissing() throws Exception {
+        mockMvc.perform(get("/companies")
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "reader-2")
+                                        .claim("tenant_id", UUID.randomUUID().toString())
+                                        .claim("subject_type", "USER"))
+                                .authorities(() -> "SCOPE_company:write")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("SCOPE_MISSING"))
+                .andExpect(jsonPath("$.message").value("Required scope is missing"));
+    }
+
+    @Test
     void updateLocationNormalizesCountryAndRegionCodes() throws Exception {
         String companyId = UUID.randomUUID().toString();
         String locationId = UUID.randomUUID().toString();
