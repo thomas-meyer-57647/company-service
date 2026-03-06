@@ -135,7 +135,10 @@ class InvariantApiIntegrationTests {
                 .toArray(GrantedAuthority[]::new);
 
         return jwt()
-                .jwt(j -> j.subject("tester").claim("tenant_id", companyId))
+                .jwt(j -> j
+                        .subject("tester")
+                        .claim("tenant_id", companyId)
+                        .claim("subject_type", "USER"))
                 .authorities(auths);
     }
 

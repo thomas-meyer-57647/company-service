@@ -6,7 +6,6 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Instant;
@@ -98,13 +97,17 @@ class SecurityJwtIntegrationTests {
     @Test
     void missingJwtReturnsUnauthorized_company() throws Exception {
         mockMvc.perform(get("/companies/{companyId}", "company-1"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"))
+                .andExpect(jsonPath("$.message").value("Authentication required"));
     }
 
     @Test
     void missingJwtReturnsUnauthorized_location() throws Exception {
         mockMvc.perform(get("/location/{locationId}", "loc-1"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"))
+                .andExpect(jsonPath("$.message").value("Authentication required"));
     }
 
     @Test
@@ -126,8 +129,9 @@ class SecurityJwtIntegrationTests {
                 .header("alg", "RS256")
                 .claim("sub", "user-1")
                 .claim("tenant_id", "company-1")
+                .claim("subject_type", "USER")
                 .claim("aud", List.of("company-service"))
-                // bewusst KEIN scope/scp claim -> soll forbidden ergeben
+        // bewusst KEIN scope/scp claim -> soll forbidden ergeben
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(600))
                 .build();
@@ -148,6 +152,7 @@ class SecurityJwtIntegrationTests {
                 .header("alg", "RS256")
                 .claim("sub", "user-1")
                 .claim("tenant_id", "company-1")
+                .claim("subject_type", "USER")
                 .claim("aud", List.of("company-service"))
                 // bewusst KEIN scope/scp claim -> soll forbidden ergeben
                 .issuedAt(now)
@@ -203,6 +208,28 @@ class SecurityJwtIntegrationTests {
 
         mockMvc.perform(get("/companies/{companyId}", "company-1")
                         .header("Authorization", "Bearer bad-subject"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"))
+                .andExpect(jsonPath("$.message").value("invalid subject_type"));
+    }
+
+    @Test
+    void missingSubjectTypeReturnsUnauthorized() throws Exception {
+        Instant now = Instant.now();
+        Jwt jwt = Jwt.withTokenValue("no-subject-type")
+                .header("alg", "RS256")
+                .claim("sub", "user-1")
+                .claim("tenant_id", "company-1")
+                .claim("scp", List.of("company:read"))
+                .claim("aud", List.of("company-service"))
+                .issuedAt(now)
+                .expiresAt(now.plusSeconds(600))
+                .build();
+
+        when(jwtDecoder.decode("no-subject-type")).thenReturn(jwt);
+
+        mockMvc.perform(get("/companies/{companyId}", "company-1")
+                        .header("Authorization", "Bearer no-subject-type"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"))
                 .andExpect(jsonPath("$.message").value("invalid subject_type"));
