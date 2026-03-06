@@ -268,6 +268,62 @@ class BootstrapLocationDeletionIntegrationTests {
     }
 
     @Test
+    void createLocationReturnsCreated() throws Exception {
+        String companyId = UUID.randomUUID().toString();
+        String locationId = UUID.randomUUID().toString();
+        persistCompanyWithLocation(companyId, locationId);
+
+        mockMvc.perform(post("/companies/{companyId}/locations", companyId)
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "creator-1")
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
+                                .authorities(() -> "SCOPE_company:write"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name":"Field Office",
+                                  "locationCode":"FO-1",
+                                  "timezone":"Europe/Rome",
+                                  "countryCode":"it",
+                                  "regionCode":"laz"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.companyId").value(companyId))
+                .andExpect(jsonPath("$.status").value("OPEN"))
+                .andExpect(jsonPath("$.countryCode").value("IT"))
+                .andExpect(jsonPath("$.regionCode").value("LAZ"));
+    }
+
+    @Test
+    void createLocationWithInvalidCountryCodeFails() throws Exception {
+        String companyId = UUID.randomUUID().toString();
+        String locationId = UUID.randomUUID().toString();
+        persistCompanyWithLocation(companyId, locationId);
+
+        mockMvc.perform(post("/companies/{companyId}/locations", companyId)
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "creator-2")
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
+                                .authorities(() -> "SCOPE_company:write"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name":"Field Office",
+                                  "locationCode":"FO-1",
+                                  "timezone":"Europe/Rome",
+                                  "countryCode":"GERM",
+                                  "regionCode":"laz"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_COUNTRY_CODE"))
+                .andExpect(jsonPath("$.message").value("Country code must be two alphabetic characters"));
+    }
+
+    @Test
     void updateLocationNormalizesCountryAndRegionCodes() throws Exception {
         String companyId = UUID.randomUUID().toString();
         String locationId = UUID.randomUUID().toString();
