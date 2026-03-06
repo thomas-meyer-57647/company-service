@@ -230,6 +230,117 @@ class BootstrapLocationDeletionIntegrationTests {
     }
 
     @Test
+    void getHeadquarterReturnsMainLocation() throws Exception {
+        String companyId = UUID.randomUUID().toString();
+        String locationId = UUID.randomUUID().toString();
+        persistCompanyWithLocation(companyId, locationId);
+
+        mockMvc.perform(get("/companies/{companyId}/headquarter", companyId)
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "reader-4")
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
+                                .authorities(() -> "SCOPE_company:read")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.locationId").value(locationId));
+    }
+
+    @Test
+    void setHeadquarterUpdatesMainLocation() throws Exception {
+        String companyId = UUID.randomUUID().toString();
+        String originalLocationId = UUID.randomUUID().toString();
+        String newLocationId = UUID.randomUUID().toString();
+        persistCompanyWithLocation(companyId, originalLocationId);
+        persistAdditionalLocation(companyId, newLocationId, "Branch Office");
+
+        mockMvc.perform(put("/companies/{companyId}/headquarter", companyId)
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "admin-qa")
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
+                                .authorities(() -> "SCOPE_company:admin"))
+                        .header("Idempotency-Key", "hq-key-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "locationId":"%s"
+                                }
+                                """.formatted(newLocationId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.locationId").value(newLocationId));
+
+        assertThat(companyRepository.findById(companyId).orElseThrow().getMainLocationId()).isEqualTo(newLocationId);
+    }
+
+    @Test
+    void setHeadquarterWithClosedLocationReturnsConflict() throws Exception {
+        String companyId = UUID.randomUUID().toString();
+        String originalLocationId = UUID.randomUUID().toString();
+        String closedLocationId = UUID.randomUUID().toString();
+        persistCompanyWithLocation(companyId, originalLocationId);
+        persistAdditionalLocation(companyId, closedLocationId, "Branch Office", LocationStatus.CLOSED);
+
+        mockMvc.perform(put("/companies/{companyId}/headquarter", companyId)
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "admin-qa")
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
+                                .authorities(() -> "SCOPE_company:admin"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "locationId":"%s"
+                                }
+                                """.formatted(closedLocationId)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("HEADQUARTER_MUST_BE_OPEN"))
+                .andExpect(jsonPath("$.message").value("Headquarter must be OPEN"));
+    }
+
+    @Test
+    void setHeadquarterIdempotencyConflictReturnsConflict() throws Exception {
+        String companyId = UUID.randomUUID().toString();
+        String originalLocationId = UUID.randomUUID().toString();
+        String firstTargetLocationId = UUID.randomUUID().toString();
+        String secondTargetLocationId = UUID.randomUUID().toString();
+        persistCompanyWithLocation(companyId, originalLocationId);
+        persistAdditionalLocation(companyId, firstTargetLocationId, "Branch A");
+        persistAdditionalLocation(companyId, secondTargetLocationId, "Branch B");
+
+        mockMvc.perform(put("/companies/{companyId}/headquarter", companyId)
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "admin-qa")
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
+                                .authorities(() -> "SCOPE_company:admin"))
+                        .header("Idempotency-Key", "hq-key-2")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "locationId":"%s"
+                                }
+                                """.formatted(firstTargetLocationId)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(put("/companies/{companyId}/headquarter", companyId)
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "admin-qa")
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
+                                .authorities(() -> "SCOPE_company:admin"))
+                        .header("Idempotency-Key", "hq-key-2")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "locationId":"%s"
+                                }
+                                """.formatted(secondTargetLocationId)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_CONFLICT"))
+                .andExpect(jsonPath("$.message").value("Idempotency-Key was already used with a different payload"));
+    }
+
+    @Test
     void listCompanyLocationsFiltersByNameContains() throws Exception {
         String companyId = UUID.randomUUID().toString();
         String firstLocationId = UUID.randomUUID().toString();
@@ -598,6 +709,10 @@ class BootstrapLocationDeletionIntegrationTests {
     }
 
     private void persistAdditionalLocation(String companyId, String locationId, String name) {
+        persistAdditionalLocation(companyId, locationId, name, LocationStatus.OPEN);
+    }
+
+    private void persistAdditionalLocation(String companyId, String locationId, String name, LocationStatus status) {
         Instant now = Instant.now();
         LocationEntity location = new LocationEntity();
         location.setLocationId(locationId);
@@ -605,7 +720,7 @@ class BootstrapLocationDeletionIntegrationTests {
         location.setName(name);
         location.setLocationCode("LOC-" + locationId);
         location.setTimezone("Europe/Berlin");
-        location.setStatus(LocationStatus.OPEN);
+        location.setStatus(status);
         location.setCreatedAt(now);
         location.setCreatedBy("seed");
         location.setModifiedAt(now);

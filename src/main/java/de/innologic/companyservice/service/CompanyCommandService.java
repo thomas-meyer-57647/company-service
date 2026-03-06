@@ -339,6 +339,78 @@ public class CompanyCommandService {
             @CacheEvict(cacheNames = "locationsByCompany", allEntries = true)
     })
     @Transactional
+    public CompanyEntity setHeadquarter(
+            String companyId,
+            String locationId,
+            String idempotencyKey,
+            String modifiedBy
+    ) {
+        String normalizedKey = normalizeIdempotencyKey(idempotencyKey);
+        String requestHash = normalizedKey == null ? null : headquarterRequestHash(companyId, locationId);
+        if (normalizedKey != null) {
+            BootstrapIdempotencyEntity existing = bootstrapIdempotencyRepository.findById(normalizedKey).orElse(null);
+            if (existing != null) {
+                if (!existing.getCompanyId().equals(companyId)) {
+                    throw new ConflictException(
+                            ErrorCode.IDEMPOTENCY_KEY_CONFLICT,
+                            "Idempotency-Key was already used with a different payload"
+                    );
+                }
+                return resolveExistingBootstrapResult(existing, requestHash);
+            }
+        }
+
+        Instant now = Instant.now();
+        CompanyEntity company = setHeadquarterInternal(companyId, locationId, now, modifiedBy);
+
+        if (normalizedKey != null) {
+            BootstrapIdempotencyEntity idempotency = new BootstrapIdempotencyEntity();
+            idempotency.setIdempotencyKey(normalizedKey);
+            idempotency.setRequestHash(requestHash);
+            idempotency.setCompanyId(companyId);
+            idempotency.setCreatedAt(now);
+            idempotency.setCreatedBy(modifiedBy);
+            try {
+                bootstrapIdempotencyRepository.save(idempotency);
+            } catch (DataIntegrityViolationException ex) {
+                BootstrapIdempotencyEntity existing = bootstrapIdempotencyRepository.findById(normalizedKey)
+                        .orElseThrow(() -> ex);
+                return resolveExistingBootstrapResult(existing, requestHash);
+            }
+        }
+
+        return company;
+    }
+
+    private CompanyEntity setHeadquarterInternal(String companyId, String locationId, Instant now, String modifiedBy) {
+        CompanyEntity company = getActiveCompany(companyId);
+        LocationEntity location = locationRepository.findByLocationIdAndCompanyIdAndTrashedAtIsNull(locationId, companyId)
+                .orElseThrow(() -> new ConflictException(
+                        ErrorCode.LOCATION_NOT_IN_COMPANY,
+                        "Location must belong to the company and must not be trashed"
+                ));
+        if (location.getStatus() != LocationStatus.OPEN) {
+            throw new ConflictException(ErrorCode.HEADQUARTER_MUST_BE_OPEN, "Headquarter must be OPEN");
+        }
+        company.setMainLocationId(locationId);
+        company.setModifiedAt(now);
+        company.setModifiedBy(modifiedBy);
+        ensureMainLocationValid(company);
+        return company;
+    }
+
+    private String headquarterRequestHash(String companyId, String locationId) {
+        String canonicalPayload = "SET_HEADQUARTER|"
+                + canonical(companyId)
+                + "|" + canonical(locationId);
+        return sha256(canonicalPayload);
+    }
+
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "companiesById", key = "#companyId"),
+            @CacheEvict(cacheNames = "locationsByCompany", allEntries = true)
+    })
+    @Transactional
     public CompanyEntity trashCompany(String companyId, String trashedBy) {
         CompanyEntity company = getActiveCompany(companyId);
         Instant now = Instant.now();
