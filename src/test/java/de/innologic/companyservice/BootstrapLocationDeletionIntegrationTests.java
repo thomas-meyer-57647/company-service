@@ -677,6 +677,60 @@ class BootstrapLocationDeletionIntegrationTests {
                 .isEqualTo(DeletionState.COMPLETED);
     }
 
+    @Test
+    void getCompanyDuringDeletionReturnsDeletionInProgress() throws Exception {
+        String companyId = UUID.randomUUID().toString();
+        String locationId = UUID.randomUUID().toString();
+        persistCompanyWithLocation(companyId, locationId);
+
+        mockMvc.perform(delete("/companies/{companyId}", companyId)
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "admin-2")
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
+                                .authorities(() -> "SCOPE_company:admin")))
+                .andExpect(status().isAccepted());
+
+        mockMvc.perform(get("/companies/{companyId}", companyId)
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "reader-5")
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
+                                .authorities(() -> "SCOPE_company:read")))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("DELETION_IN_PROGRESS"))
+                .andExpect(jsonPath("$.message").value("Company deletion in progress"));
+    }
+
+    @Test
+    void deletionStatusEndpointReturnsWorkflowDetails() throws Exception {
+        String companyId = UUID.randomUUID().toString();
+        String locationId = UUID.randomUUID().toString();
+        persistCompanyWithLocation(companyId, locationId);
+
+        mockMvc.perform(delete("/companies/{companyId}", companyId)
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "admin-3")
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
+                                .authorities(() -> "SCOPE_company:admin")))
+                .andExpect(status().isAccepted());
+
+        mockMvc.perform(get("/companies/{companyId}/deletion-status", companyId)
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "reader-6")
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
+                                .authorities(() -> "SCOPE_company:read")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.companyId").value(companyId))
+                .andExpect(jsonPath("$.state").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.requestedAtUtc").isNotEmpty())
+                .andExpect(jsonPath("$.completedAtUtc").isEmpty())
+                .andExpect(jsonPath("$.failedAtUtc").isEmpty())
+                .andExpect(jsonPath("$.failureReason").isEmpty());
+    }
+
     private void persistCompanyWithLocation(String companyId, String locationId) {
         persistCompanyWithLocation(companyId, locationId, null, null);
     }

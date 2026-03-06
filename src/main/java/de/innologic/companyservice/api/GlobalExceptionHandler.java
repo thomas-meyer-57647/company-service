@@ -6,6 +6,7 @@ import de.innologic.companyservice.domain.DomainException;
 import de.innologic.companyservice.domain.ErrorCode;
 import de.innologic.companyservice.domain.LocationNotFoundException;
 import de.innologic.companyservice.domain.ResourceNotFoundException;
+import de.innologic.companyservice.service.DeletionGuardService.CompanyDeletionInProgressException;
 import de.innologic.companyservice.service.LocationCommandService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
@@ -74,6 +75,15 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ResourceNotFoundException.class)
     ResponseEntity<ErrorResponse> handleNotFound(ResourceNotFoundException ex, HttpServletRequest request) {
+        if (ex instanceof CompanyDeletionInProgressException) {
+            return build(
+                    HttpStatus.NOT_FOUND,
+                    ErrorCode.DELETION_IN_PROGRESS,
+                    "Company deletion in progress",
+                    request,
+                    List.of()
+            );
+        }
         ErrorCode errorCode = ex instanceof LocationNotFoundException
                 ? ErrorCode.LOCATION_NOT_FOUND
                 : ErrorCode.RESOURCE_NOT_FOUND;
