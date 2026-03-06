@@ -6,6 +6,8 @@ import de.innologic.companyservice.api.dto.company.CompanyResponse;
 import de.innologic.companyservice.api.dto.company.CompanyUpdateRequest;
 import de.innologic.companyservice.api.dto.company.CompanyUpdateRequest.CompanyPatchRequest;
 import de.innologic.companyservice.api.dto.company.DeletionAckRequest;
+import de.innologic.companyservice.api.dto.company.HeadquarterDto.HeadquarterResponse;
+import de.innologic.companyservice.api.dto.company.HeadquarterDto.SetHeadquarterRequest;
 import de.innologic.companyservice.api.dto.company.SetMainLocationRequest;
 import de.innologic.companyservice.api.dto.company.UpdateLogoRequest;
 import de.innologic.companyservice.api.dto.location.LocationCreateRequest;
@@ -141,6 +143,23 @@ public class CompanyController {
         return companyQueryService.listActiveCompanies(pageable).map(CompanyResponse::from);
     }
 
+    @GetMapping("/{companyId}/headquarter")
+    @Operation(
+            summary = "Get headquarter",
+            description = "Returns the configured headquarter location id for the company.",
+            security = {@SecurityRequirement(name = "bearerAuth", scopes = {"company:read"})}
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Headquarter returned"),
+            @ApiResponse(responseCode = "401", description = "Missing/invalid JWT", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Missing scope or tenant mismatch", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Company not found", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public HeadquarterResponse getHeadquarter(@PathVariable String companyId) {
+        requestContext.assertTenantAccess(companyId);
+        return new HeadquarterResponse(companyQueryService.getActiveCompany(companyId).getMainLocationId());
+    }
+
     @PutMapping("/{companyId}")
     @Operation(summary = "Update company", security = {@SecurityRequirement(name = "bearerAuth", scopes = {"company:write"})})
     @ApiResponses({
@@ -197,6 +216,35 @@ public class CompanyController {
     ) {
         requestContext.assertTenantAccess(companyId);
         return CompanyResponse.from(companyCommandService.setMainLocation(companyId, request.locationId(), requestContext.subjectId()));
+    }
+
+    @PutMapping("/{companyId}/headquarter")
+    @Operation(
+            summary = "Set headquarter",
+            description = "Updates the configured headquarter location for the company.",
+            security = {@SecurityRequirement(name = "bearerAuth", scopes = {"company:admin"})}
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Headquarter updated"),
+            @ApiResponse(responseCode = "401", description = "Missing/invalid JWT", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Missing scope or tenant mismatch", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Company or location not found", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "Headquarter must be OPEN or idempotency conflict", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public HeadquarterResponse setHeadquarter(
+            @PathVariable String companyId,
+            @Parameter(description = "Idempotency key for safe retries", required = false)
+            @RequestHeader(name = "Idempotency-Key", required = false)
+                    String idempotencyKey,
+            @Valid @RequestBody SetHeadquarterRequest request
+    ) {
+        requestContext.assertTenantAccess(companyId);
+        return new HeadquarterResponse(companyCommandService.setHeadquarter(
+                companyId,
+                request.locationId(),
+                idempotencyKey,
+                requestContext.subjectId()
+        ).getMainLocationId());
     }
 
     @PutMapping("/{companyId}/logo")
