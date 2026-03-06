@@ -1,6 +1,7 @@
 package de.innologic.companyservice;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -298,10 +299,11 @@ class SecurityJwtIntegrationTests {
     }
 
     @Test
-    void tenantMismatchFromServiceReturnsTenantMismatchCode() throws Exception {
+    void tenantMismatchHeaderReturnsTenantMismatchCode() throws Exception {
         when(requestContext.tenantIdFromJwt()).thenReturn(Optional.of("company-1"));
-        when(locationCommandService.trashLocation(any(), any(), any()))
-                .thenThrow(new AccessDeniedException("tenant_id does not match location.companyId"));
+        when(requestContext.tenantId()).thenReturn("company-1");
+        doThrow(new AccessDeniedException("tenant mismatch"))
+                .when(requestContext).assertTenantHeaderMatches("other-company");
 
         mockMvc.perform(delete("/location/{locationId}", "loc-1")
                         .with(jwt()
@@ -313,7 +315,7 @@ class SecurityJwtIntegrationTests {
                                         .claim("scp", List.of("company:admin"))
                                         .claim("scope", List.of("company:admin")))
                                 .authorities(new SimpleGrantedAuthority("SCOPE_company:admin")))
-                        .header("X-Company-Id", "company-1"))
+                        .header("X-Tenant-Id", "other-company"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("TENANT_MISMATCH"))
                 .andExpect(jsonPath("$.message").value("tenant mismatch"));

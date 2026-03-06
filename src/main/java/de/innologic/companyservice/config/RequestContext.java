@@ -1,23 +1,20 @@
 package de.innologic.companyservice.config;
 
 import jakarta.servlet.http.HttpServletRequest;
-import java.util.Arrays;
 import java.util.Optional;
-import org.springframework.core.env.Environment;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 @Component
 public class RequestContext {
 
-    private final Environment environment;
     private final HttpServletRequest request;
 
-    public RequestContext(Environment environment, HttpServletRequest request) {
-        this.environment = environment;
+    public RequestContext(HttpServletRequest request) {
         this.request = request;
     }
 
@@ -29,14 +26,6 @@ public class RequestContext {
                 return subject;
             }
         }
-
-        if (isDevProfileActive()) {
-            String subjectHeader = request.getHeader("X-Subject-Id");
-            if (subjectHeader != null && !subjectHeader.isBlank()) {
-                return subjectHeader;
-            }
-        }
-
         if (authentication != null && authentication.isAuthenticated() && authentication.getName() != null) {
             return authentication.getName();
         }
@@ -55,26 +44,24 @@ public class RequestContext {
         return Optional.of(tenantId);
     }
 
+    public String tenantId() {
+        return tenantIdFromJwt().orElseThrow(() -> new AccessDeniedException("tenant_id claim is required"));
+    }
+
     public void assertTenantAccess(String companyId) {
-        String tenantId = tenantIdFromJwt()
-                .orElseThrow(() -> new AccessDeniedException("tenant_id claim is required"));
+        String tenantId = tenantId();
         if (!tenantId.equals(companyId)) {
             throw new AccessDeniedException("tenant_id does not match requested companyId");
         }
     }
 
-    public Optional<String> companyIdFromDevHeader() {
-        if (!isDevProfileActive()) {
-            return Optional.empty();
+    public void assertTenantHeaderMatches(String tenantIdHeader) {
+        if (!StringUtils.hasText(tenantIdHeader)) {
+            return;
         }
-        String companyHeader = request.getHeader("X-Company-Id");
-        if (companyHeader == null || companyHeader.isBlank()) {
-            return Optional.empty();
+        String tenantId = tenantId();
+        if (!tenantId.equals(tenantIdHeader)) {
+            throw new AccessDeniedException("tenant mismatch");
         }
-        return Optional.of(companyHeader);
-    }
-
-    private boolean isDevProfileActive() {
-        return Arrays.stream(environment.getActiveProfiles()).anyMatch("dev"::equalsIgnoreCase);
     }
 }

@@ -16,7 +16,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.http.HttpStatus;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -64,11 +63,12 @@ public class LocationController {
     })
     public LocationResponse getLocation(
             @PathVariable String locationId,
-            @Parameter(description = "Company context for company-scoped checks", required = true,
+            @Parameter(description = "Company context for company-scoped checks via X-Tenant-Id header", required = true,
                     examples = @ExampleObject(value = "d290f1ee-6c54-4b01-90e6-d701748f0851"))
-            @RequestHeader(name = "X-Company-Id", required = false) String companyId
+            @RequestHeader(name = "X-Tenant-Id", required = false) String tenantIdHeader
     ) {
-        return LocationResponse.from(locationQueryService.getActiveLocationForTenant(locationId, resolveTenantId(companyId)));
+        requestContext.assertTenantHeaderMatches(tenantIdHeader);
+        return LocationResponse.from(locationQueryService.getActiveLocationForTenant(locationId, resolveTenantId(tenantIdHeader)));
     }
 
     @PutMapping("/{locationId}")
@@ -86,11 +86,12 @@ public class LocationController {
     })
     public LocationResponse updateLocation(
             @PathVariable String locationId,
-            @RequestHeader(name = "X-Company-Id", required = false) String companyId,
+            @RequestHeader(name = "X-Tenant-Id", required = false) String tenantIdHeader,
             @Valid @RequestBody LocationUpdateRequest request
     ) {
+        requestContext.assertTenantHeaderMatches(tenantIdHeader);
         return LocationResponse.from(locationCommandService.updateLocation(
-                resolveTenantId(companyId),
+                resolveTenantId(tenantIdHeader),
                 locationId,
                 request.name(),
                 request.locationCode(),
@@ -112,12 +113,13 @@ public class LocationController {
     })
     public LocationResponse closeLocation(
             @PathVariable String locationId,
-            @RequestHeader(name = "X-Company-Id", required = false) String companyId,
+            @RequestHeader(name = "X-Tenant-Id", required = false) String tenantIdHeader,
             @Valid @RequestBody(required = false) CloseLocationRequest request
     ) {
+        requestContext.assertTenantHeaderMatches(tenantIdHeader);
         String reason = request == null ? null : request.reason();
         return LocationResponse.from(locationCommandService.closeLocation(
-                resolveTenantId(companyId),
+                resolveTenantId(tenantIdHeader),
                 locationId,
                 requestContext.subjectId(),
                 reason
@@ -135,10 +137,11 @@ public class LocationController {
     })
     public LocationResponse reopenLocation(
             @PathVariable String locationId,
-            @RequestHeader(name = "X-Company-Id", required = false) String companyId
+            @RequestHeader(name = "X-Tenant-Id", required = false) String tenantIdHeader
     ) {
+        requestContext.assertTenantHeaderMatches(tenantIdHeader);
         return LocationResponse.from(locationCommandService.reopenLocation(
-                resolveTenantId(companyId),
+                resolveTenantId(tenantIdHeader),
                 locationId,
                 requestContext.subjectId()
         ));
@@ -156,9 +159,10 @@ public class LocationController {
     })
     public void trashLocation(
             @PathVariable String locationId,
-            @RequestHeader(name = "X-Company-Id", required = false) String companyId
+            @RequestHeader(name = "X-Tenant-Id", required = false) String tenantIdHeader
     ) {
-        locationCommandService.trashLocation(resolveTenantId(companyId), locationId, requestContext.subjectId());
+        requestContext.assertTenantHeaderMatches(tenantIdHeader);
+        locationCommandService.trashLocation(resolveTenantId(tenantIdHeader), locationId, requestContext.subjectId());
     }
 
     @PostMapping("/{locationId}/restore")
@@ -172,29 +176,18 @@ public class LocationController {
     })
     public LocationResponse restoreLocation(
             @PathVariable String locationId,
-            @RequestHeader(name = "X-Company-Id", required = false) String companyId
+            @RequestHeader(name = "X-Tenant-Id", required = false) String tenantIdHeader
     ) {
+        requestContext.assertTenantHeaderMatches(tenantIdHeader);
         return LocationResponse.from(locationCommandService.restoreLocation(
-                resolveTenantId(companyId),
+                resolveTenantId(tenantIdHeader),
                 locationId,
                 requestContext.subjectId()
         ));
     }
 
-    private String resolveTenantId(String companyIdHeader) {
-        var tenantIdFromJwt = requestContext.tenantIdFromJwt();
-        if (tenantIdFromJwt.isPresent()) {
-            String tenantId = tenantIdFromJwt.get();
-            if (companyIdHeader != null && !companyIdHeader.isBlank() && !tenantId.equals(companyIdHeader)) {
-                throw new AccessDeniedException("tenant_id does not match X-Company-Id header");
-            }
-            return tenantId;
-        }
-
-        if (companyIdHeader != null && !companyIdHeader.isBlank()) {
-            return companyIdHeader;
-        }
-        return requestContext.companyIdFromDevHeader()
-                .orElseThrow(() -> new IllegalArgumentException("Missing company context. Provide X-Company-Id header."));
+    private String resolveTenantId(String tenantIdHeader) {
+        requestContext.assertTenantHeaderMatches(tenantIdHeader);
+        return requestContext.tenantId();
     }
 }
