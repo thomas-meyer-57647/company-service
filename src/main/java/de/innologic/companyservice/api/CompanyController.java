@@ -297,9 +297,11 @@ public class CompanyController {
     public Page<LocationResponse> listCompanyLocations(
             @PathVariable String companyId,
             @Parameter(description = "Optional status filter, e.g. OPEN or CLOSED") @RequestParam(required = false) LocationStatus status,
+            @Parameter(description = "Optional substring match for location name (case-insensitive)") @RequestParam(required = false) String nameContains,
             @ParameterObject Pageable pageable
     ) {
         requestContext.assertTenantAccess(companyId);
-        return companyQueryService.listActiveLocations(companyId, status, pageable).map(LocationResponse::from);
+        return companyQueryService.listActiveLocations(companyId, status, nameContains, pageable)
+                .map(LocationResponse::from);
     }
 }

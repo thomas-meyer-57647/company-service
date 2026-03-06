@@ -230,6 +230,44 @@ class BootstrapLocationDeletionIntegrationTests {
     }
 
     @Test
+    void listCompanyLocationsFiltersByNameContains() throws Exception {
+        String companyId = UUID.randomUUID().toString();
+        String firstLocationId = UUID.randomUUID().toString();
+        persistCompanyWithLocation(companyId, firstLocationId);
+        String secondLocationId = UUID.randomUUID().toString();
+        persistAdditionalLocation(companyId, secondLocationId, "Remote Office");
+
+        mockMvc.perform(get("/companies/{companyId}/locations", companyId)
+                        .param("nameContains", "Remote")
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "reader-3")
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
+                                .authorities(() -> "SCOPE_company:read")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].locationId").value(secondLocationId))
+                .andExpect(jsonPath("$.content[0].name").value("Remote Office"));
+    }
+
+    @Test
+    void listCompanyLocationsWithoutScopeReturnsScopeMissing() throws Exception {
+        String companyId = UUID.randomUUID().toString();
+        String locationId = UUID.randomUUID().toString();
+        persistCompanyWithLocation(companyId, locationId);
+
+        mockMvc.perform(get("/companies/{companyId}/locations", companyId)
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "reader-4")
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
+                                .authorities(() -> "SCOPE_company:write")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("SCOPE_MISSING"))
+                .andExpect(jsonPath("$.message").value("Required scope is missing"));
+    }
+
+    @Test
     void updateLocationNormalizesCountryAndRegionCodes() throws Exception {
         String companyId = UUID.randomUUID().toString();
         String locationId = UUID.randomUUID().toString();
@@ -436,6 +474,22 @@ class BootstrapLocationDeletionIntegrationTests {
         location.setName("HQ");
         location.setCountryCode(countryCode);
         location.setRegionCode(regionCode);
+        location.setStatus(LocationStatus.OPEN);
+        location.setCreatedAt(now);
+        location.setCreatedBy("seed");
+        location.setModifiedAt(now);
+        location.setModifiedBy("seed");
+        locationRepository.save(location);
+    }
+
+    private void persistAdditionalLocation(String companyId, String locationId, String name) {
+        Instant now = Instant.now();
+        LocationEntity location = new LocationEntity();
+        location.setLocationId(locationId);
+        location.setCompanyId(companyId);
+        location.setName(name);
+        location.setLocationCode("LOC-" + locationId);
+        location.setTimezone("Europe/Berlin");
         location.setStatus(LocationStatus.OPEN);
         location.setCreatedAt(now);
         location.setCreatedBy("seed");
