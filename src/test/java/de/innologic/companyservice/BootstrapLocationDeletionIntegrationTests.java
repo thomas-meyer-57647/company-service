@@ -328,6 +328,7 @@ class BootstrapLocationDeletionIntegrationTests {
         String companyId = UUID.randomUUID().toString();
         String locationId = UUID.randomUUID().toString();
         persistCompanyWithLocation(companyId, locationId);
+        LocationEntity location = locationRepository.findById(locationId).orElseThrow();
 
         mockMvc.perform(put("/location/{locationId}", locationId)
                         .with(jwt().jwt(jwt -> jwt
@@ -342,9 +343,10 @@ class BootstrapLocationDeletionIntegrationTests {
                                   "locationCode":"HQ-1",
                                   "timezone":"Europe/Berlin",
                                   "countryCode":"de",
-                                  "regionCode":"de-hb"
+                                  "regionCode":"de-hb",
+                                  "version":%d
                                 }
-                                """))
+                                """.formatted(location.getVersion())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.countryCode").value("DE"))
                 .andExpect(jsonPath("$.regionCode").value("DE-HB"));
@@ -355,6 +357,7 @@ class BootstrapLocationDeletionIntegrationTests {
         String companyId = UUID.randomUUID().toString();
         String locationId = UUID.randomUUID().toString();
         persistCompanyWithLocation(companyId, locationId, "DE", "DE-HB");
+        LocationEntity location = locationRepository.findById(locationId).orElseThrow();
 
         mockMvc.perform(put("/location/{locationId}", locationId)
                         .with(jwt().jwt(jwt -> jwt
@@ -367,9 +370,10 @@ class BootstrapLocationDeletionIntegrationTests {
                                 {
                                   "name":"HQ Updated",
                                   "locationCode":"HQ-1",
-                                  "timezone":"Europe/Berlin"
+                                  "timezone":"Europe/Berlin",
+                                  "version":%d
                                 }
-                                """))
+                                """.formatted(location.getVersion())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.countryCode").value("DE"))
                 .andExpect(jsonPath("$.regionCode").value("DE-HB"));
@@ -384,6 +388,7 @@ class BootstrapLocationDeletionIntegrationTests {
         String companyId = UUID.randomUUID().toString();
         String locationId = UUID.randomUUID().toString();
         persistCompanyWithLocation(companyId, locationId, "DE", "DE-HB");
+        LocationEntity location = locationRepository.findById(locationId).orElseThrow();
 
         mockMvc.perform(put("/location/{locationId}", locationId)
                         .with(jwt().jwt(jwt -> jwt
@@ -398,9 +403,10 @@ class BootstrapLocationDeletionIntegrationTests {
                                   "locationCode":"HQ-1",
                                   "timezone":"Europe/Berlin",
                                   "countryCode":"",
-                                  "regionCode":""
+                                  "regionCode":"",
+                                  "version":%d
                                 }
-                                """))
+                                """.formatted(location.getVersion())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.countryCode").isEmpty())
                 .andExpect(jsonPath("$.regionCode").isEmpty());
@@ -415,6 +421,7 @@ class BootstrapLocationDeletionIntegrationTests {
         String companyId = UUID.randomUUID().toString();
         String locationId = UUID.randomUUID().toString();
         persistCompanyWithLocation(companyId, locationId, "DE", "DE-HB");
+        LocationEntity location = locationRepository.findById(locationId).orElseThrow();
 
         mockMvc.perform(put("/location/{locationId}", locationId)
                         .with(jwt().jwt(jwt -> jwt
@@ -429,10 +436,62 @@ class BootstrapLocationDeletionIntegrationTests {
                                   "locationCode":"HQ-1",
                                   "timezone":"Europe/Berlin",
                                   "countryCode":"D",
-                                  "regionCode":"DE-HB"
+                                  "regionCode":"DE-HB",
+                                  "version":%d
                                 }
-                                """))
+                                """.formatted(location.getVersion())))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void patchLocationAppliesPartialChangesWhenVersionMatches() throws Exception {
+        String companyId = UUID.randomUUID().toString();
+        String locationId = UUID.randomUUID().toString();
+        persistCompanyWithLocation(companyId, locationId, "DE", "DE-HB");
+        LocationEntity location = locationRepository.findById(locationId).orElseThrow();
+
+        mockMvc.perform(patch("/location/{locationId}", locationId)
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "editor-3")
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
+                                .authorities(() -> "SCOPE_company:write"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "timezone":"Europe/Riga",
+                                  "regionCode":"LV-RIX",
+                                  "version":%d
+                                }
+                                """.formatted(location.getVersion())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.timezone").value("Europe/Riga"))
+                .andExpect(jsonPath("$.regionCode").value("LV-RIX"));
+    }
+
+    @Test
+    void patchLocationVersionMismatchYieldsConflict() throws Exception {
+        String companyId = UUID.randomUUID().toString();
+        String locationId = UUID.randomUUID().toString();
+        persistCompanyWithLocation(companyId, locationId, "DE", "DE-HB");
+        LocationEntity location = locationRepository.findById(locationId).orElseThrow();
+
+        mockMvc.perform(patch("/location/{locationId}", locationId)
+                        .with(jwt().jwt(jwt -> jwt
+                                        .claim("sub", "editor-4")
+                                        .claim("tenant_id", companyId)
+                                        .claim("subject_type", "USER"))
+                                .authorities(() -> "SCOPE_company:write"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "timezone":"Europe/Riga",
+                                  "version":%d
+                                }
+                                """.formatted(location.getVersion() + 1)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"))
+                .andExpect(jsonPath("$.message").value("Version conflict"));
     }
 
     @Test
