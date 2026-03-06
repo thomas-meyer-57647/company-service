@@ -1,11 +1,12 @@
 package de.innologic.companyservice.api;
 
+import de.innologic.companyservice.config.CorrelationIdFilter;
+import de.innologic.companyservice.config.SecurityConfig.ScopeAuthorizationManager.ScopeMissingException;
 import de.innologic.companyservice.domain.DomainException;
 import de.innologic.companyservice.domain.ErrorCode;
 import de.innologic.companyservice.domain.LocationNotFoundException;
 import de.innologic.companyservice.domain.ResourceNotFoundException;
-import de.innologic.companyservice.config.CorrelationIdFilter;
-import de.innologic.companyservice.config.SecurityConfig.ScopeAuthorizationManager.ScopeMissingException;
+import de.innologic.companyservice.service.LocationCommandService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import java.util.ArrayList;
@@ -82,6 +83,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DomainException.class)
     ResponseEntity<ErrorResponse> handleDomainConflict(DomainException ex, HttpServletRequest request) {
         return build(HttpStatus.CONFLICT, ex.getErrorCode(), ex.getMessage(), request, List.of());
+    }
+
+    @ExceptionHandler(LocationCommandService.InvalidInputException.class)
+    ResponseEntity<ErrorResponse> handleInvalidLocation(LocationCommandService.InvalidInputException ex, HttpServletRequest request) {
+        ErrorResponse body = ErrorResponse.of(
+                HttpStatus.BAD_REQUEST.value(),
+                ex.getErrorCode(),
+                ex.getMessage(),
+                request.getRequestURI(),
+                correlationId(request),
+                List.of()
+        );
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
     @ExceptionHandler(OptimisticLockingFailureException.class)

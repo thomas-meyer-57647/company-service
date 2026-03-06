@@ -3,6 +3,7 @@ package de.innologic.companyservice.service;
 import de.innologic.companyservice.domain.ConflictException;
 import de.innologic.companyservice.domain.ErrorCode;
 import de.innologic.companyservice.domain.ResourceNotFoundException;
+import de.innologic.companyservice.api.dto.location.LocationCreateRequest;
 import de.innologic.companyservice.persistence.entity.CompanyEntity;
 import de.innologic.companyservice.persistence.entity.LocationEntity;
 import de.innologic.companyservice.persistence.entity.LocationStatus;
@@ -11,6 +12,7 @@ import de.innologic.companyservice.persistence.repository.CompanyRepository;
 import de.innologic.companyservice.persistence.repository.LocationRepository;
 import java.time.Instant;
 import java.util.Locale;
+import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Caching;
@@ -68,6 +70,31 @@ public class LocationCommandService {
         location.setModifiedAt(Instant.now());
         location.setModifiedBy(modifiedBy);
         return location;
+    }
+
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "companiesById", key = "#tenantId"),
+            @CacheEvict(cacheNames = "locationsByCompany", allEntries = true)
+    })
+    @Transactional
+    public LocationEntity createLocation(String tenantId, LocationCreateRequest request, String createdBy) {
+        CompanyEntity company = getActiveCompany(tenantId);
+        Instant now = Instant.now();
+        LocationEntity location = new LocationEntity();
+        location.setLocationId(UUID.randomUUID().toString());
+        location.setCompanyId(tenantId);
+        location.setName(request.name());
+        location.setLocationCode(request.locationCode());
+        location.setTimezone(request.timezone());
+        location.setCountryCode(normalizeCountryCodeForLocation(request.countryCode()));
+        location.setRegionCode(normalizeRegionCodeForLocation(request.regionCode()));
+        location.setStatus(LocationStatus.OPEN);
+        location.setCreatedAt(now);
+        location.setCreatedBy(createdBy);
+        location.setModifiedAt(now);
+        location.setModifiedBy(createdBy);
+        ensureMainLocationValid(company);
+        return locationRepository.save(location);
     }
 
     @Caching(evict = {
@@ -266,5 +293,35 @@ public class LocationCommandService {
             throw new IllegalArgumentException("regionCode must be at most 32 characters");
         }
         return normalized.toUpperCase(Locale.ROOT);
+    }
+
+    private String normalizeCountryCodeForLocation(String countryCode) {
+        try {
+            return normalizeCountryCode(countryCode);
+        } catch (IllegalArgumentException ex) {
+            throw new InvalidInputException("INVALID_COUNTRY_CODE", "Country code must be two alphabetic characters");
+        }
+    }
+
+    private String normalizeRegionCodeForLocation(String regionCode) {
+        try {
+            return normalizeRegionCode(regionCode);
+        } catch (IllegalArgumentException ex) {
+            throw new InvalidInputException("INVALID_REGION_CODE", "Region code must be at most 32 alphabetic characters");
+        }
+    }
+
+    public static final class InvalidInputException extends RuntimeException {
+
+        private final String errorCode;
+
+        InvalidInputException(String errorCode, String message) {
+            super(message);
+            this.errorCode = errorCode;
+        }
+
+        public String getErrorCode() {
+            return errorCode;
+        }
     }
 }

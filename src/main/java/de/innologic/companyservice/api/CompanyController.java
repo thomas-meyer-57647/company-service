@@ -8,12 +8,14 @@ import de.innologic.companyservice.api.dto.company.CompanyUpdateRequest.CompanyP
 import de.innologic.companyservice.api.dto.company.DeletionAckRequest;
 import de.innologic.companyservice.api.dto.company.SetMainLocationRequest;
 import de.innologic.companyservice.api.dto.company.UpdateLogoRequest;
+import de.innologic.companyservice.api.dto.location.LocationCreateRequest;
 import de.innologic.companyservice.api.dto.location.LocationResponse;
 import de.innologic.companyservice.config.RequestContext;
 import de.innologic.companyservice.persistence.entity.LocationStatus;
 import de.innologic.companyservice.service.CompanyCommandService;
 import de.innologic.companyservice.service.CompanyDeletionWorkflowService;
 import de.innologic.companyservice.service.CompanyQueryService;
+import de.innologic.companyservice.service.LocationCommandService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -50,17 +52,20 @@ public class CompanyController {
     private final CompanyCommandService companyCommandService;
     private final CompanyQueryService companyQueryService;
     private final CompanyDeletionWorkflowService companyDeletionWorkflowService;
+    private final LocationCommandService locationCommandService;
     private final RequestContext requestContext;
 
     public CompanyController(
             CompanyCommandService companyCommandService,
             CompanyQueryService companyQueryService,
             CompanyDeletionWorkflowService companyDeletionWorkflowService,
+            LocationCommandService locationCommandService,
             RequestContext requestContext
     ) {
         this.companyCommandService = companyCommandService;
         this.companyQueryService = companyQueryService;
         this.companyDeletionWorkflowService = companyDeletionWorkflowService;
+        this.locationCommandService = locationCommandService;
         this.requestContext = requestContext;
     }
 
@@ -303,5 +308,22 @@ public class CompanyController {
         requestContext.assertTenantAccess(companyId);
         return companyQueryService.listActiveLocations(companyId, status, nameContains, pageable)
                 .map(LocationResponse::from);
+    }
+
+    @PostMapping("/{companyId}/locations")
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Create location", security = {@SecurityRequirement(name = "bearerAuth", scopes = {"company:write"})})
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Location created"),
+            @ApiResponse(responseCode = "400", description = "Invalid jurisdiction or payload", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Missing/invalid JWT", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Missing scope or tenant mismatch", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public LocationResponse createLocation(
+            @PathVariable String companyId,
+            @Valid @RequestBody LocationCreateRequest request
+    ) {
+        requestContext.assertTenantAccess(companyId);
+        return LocationResponse.from(locationCommandService.createLocation(companyId, request, requestContext.subjectId()));
     }
 }
