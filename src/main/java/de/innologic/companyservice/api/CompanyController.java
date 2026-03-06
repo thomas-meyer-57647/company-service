@@ -5,10 +5,8 @@ import de.innologic.companyservice.api.dto.company.CompanyDeletionResponse;
 import de.innologic.companyservice.api.dto.company.CompanyResponse;
 import de.innologic.companyservice.api.dto.company.CompanyUpdateRequest;
 import de.innologic.companyservice.api.dto.company.CompanyUpdateRequest.CompanyPatchRequest;
-import de.innologic.companyservice.api.dto.company.DeletionAckRequest;
 import de.innologic.companyservice.api.dto.company.HeadquarterDto.HeadquarterResponse;
 import de.innologic.companyservice.api.dto.company.HeadquarterDto.SetHeadquarterRequest;
-import de.innologic.companyservice.api.dto.company.SetMainLocationRequest;
 import de.innologic.companyservice.api.dto.company.UpdateLogoRequest;
 import de.innologic.companyservice.api.dto.location.LocationCreateRequest;
 import de.innologic.companyservice.api.dto.location.LocationResponse;
@@ -207,27 +205,6 @@ public class CompanyController {
         return CompanyResponse.from(companyCommandService.patchCompany(companyId, request, requestContext.subjectId()));
     }
 
-    @PutMapping("/{companyId}/main-location")
-    @Operation(
-            summary = "Set main location",
-            tags = {"Legacy/Internal"},
-            security = {@SecurityRequirement(name = "bearerAuth", scopes = {"company:admin"})}
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Main location updated"),
-            @ApiResponse(responseCode = "401", description = "Missing/invalid JWT", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "403", description = "Missing scope or tenant mismatch", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "Company/location not found", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "409", description = "Invariant violation", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
-    public CompanyResponse setMainLocation(
-            @PathVariable String companyId,
-            @Valid @RequestBody SetMainLocationRequest request
-    ) {
-        requestContext.assertTenantAccess(companyId);
-        return CompanyResponse.from(companyCommandService.setMainLocation(companyId, request.locationId(), requestContext.subjectId()));
-    }
-
     @PutMapping("/{companyId}/headquarter")
     @Operation(
             summary = "Set headquarter",
@@ -330,51 +307,6 @@ public class CompanyController {
         DeletionTombstoneEntity tombstone = deletionTombstoneRepository.findByCompanyId(companyId)
                 .orElseThrow(() -> new ResourceNotFoundException("Deletion workflow not found for company: " + companyId));
         return CompanyDeletionResponse.from(tombstone);
-    }
-
-    @PostMapping("/{companyId}/deletion-ack")
-    @Operation(
-            summary = "Acknowledge company deletion",
-            description = "Internal transition endpoint for deletion workflow acknowledgements.",
-            tags = {"Legacy/Internal"}
-    )
-    @SecurityRequirement(name = "bearerAuth", scopes = {"company:admin"})
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Ack accepted", content = @Content(schema = @Schema(implementation = CompanyDeletionResponse.class))),
-            @ApiResponse(responseCode = "401", description = "Missing/invalid JWT", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "403", description = "Missing scope or tenant mismatch", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "Deletion workflow not found", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "409", description = "Invalid acknowledgement", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
-    public CompanyDeletionResponse acknowledgeDeletion(
-            @PathVariable String companyId,
-            @Valid @RequestBody DeletionAckRequest request
-    ) {
-        requestContext.assertTenantAccess(companyId);
-        return CompanyDeletionResponse.from(
-                companyDeletionWorkflowService.acknowledgeDeletion(companyId, request.serviceName(), requestContext.subjectId())
-        );
-    }
-
-    @PostMapping("/{companyId}/restore")
-    @Operation(
-            summary = "Restore company",
-            description = "Restores company and ensures valid main location plus at least one OPEN location.",
-            tags = {"Legacy/Internal"},
-            security = {@SecurityRequirement(name = "bearerAuth", scopes = {"company:admin"})}
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Company restored"),
-            @ApiResponse(responseCode = "401", description = "Missing/invalid JWT", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "403", description = "Missing scope or tenant mismatch", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "Company not found", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "409", description = "Invariant violation", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
-    public CompanyResponse restoreCompany(
-            @PathVariable String companyId
-    ) {
-        requestContext.assertTenantAccess(companyId);
-        return CompanyResponse.from(companyCommandService.restoreCompany(companyId, requestContext.subjectId()));
     }
 
     @GetMapping("/{companyId}/locations")

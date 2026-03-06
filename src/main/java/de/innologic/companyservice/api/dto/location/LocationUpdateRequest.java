@@ -1,5 +1,6 @@
 package de.innologic.companyservice.api.dto.location;
 
+import de.innologic.companyservice.persistence.entity.LocationStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -40,6 +41,8 @@ public record LocationUpdateRequest(
             @Schema(example = "DE-HB")
             @Size(max = 32)
             String regionCode,
+            @Schema(description = "Optional status transition (CLOSED/OPEN)", example = "CLOSED")
+            LocationStatus status,
             @Schema(description = "Entity version for optimistic locking", example = "3")
             @NotNull
             Long version

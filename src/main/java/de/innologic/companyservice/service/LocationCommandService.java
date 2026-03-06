@@ -8,7 +8,6 @@ import de.innologic.companyservice.api.dto.location.LocationUpdateRequest.Locati
 import de.innologic.companyservice.persistence.entity.CompanyEntity;
 import de.innologic.companyservice.persistence.entity.LocationEntity;
 import de.innologic.companyservice.persistence.entity.LocationStatus;
-import de.innologic.companyservice.persistence.entity.TrashedCause;
 import de.innologic.companyservice.persistence.repository.CompanyRepository;
 import de.innologic.companyservice.persistence.repository.LocationRepository;
 import java.time.Instant;
@@ -103,8 +102,25 @@ public class LocationCommandService {
         if (request.regionCode() != null) {
             location.setRegionCode(normalizeRegionCode(request.regionCode()));
         }
-        location.setModifiedAt(Instant.now());
-        location.setModifiedBy(modifiedBy);
+
+        Instant now = Instant.now();
+        boolean statusChanged = false;
+        LocationStatus requestedStatus = request.status();
+        if (requestedStatus != null && requestedStatus != location.getStatus()) {
+            if (requestedStatus == LocationStatus.CLOSED) {
+                ensureCanClose(location, company);
+                closeLocationEntity(location, modifiedBy, now);
+            } else {
+                reopenLocationEntity(location, modifiedBy, now);
+                ensureMainLocationValid(company);
+            }
+            statusChanged = true;
+        }
+
+        if (!statusChanged) {
+            location.setModifiedAt(now);
+            location.setModifiedBy(modifiedBy);
+        }
         return location;
     }
 
@@ -133,129 +149,38 @@ public class LocationCommandService {
         return locationRepository.save(location);
     }
 
-    @Caching(evict = {
-            @CacheEvict(cacheNames = "companiesById", key = "#tenantId"),
-            @CacheEvict(cacheNames = "locationsByCompany", allEntries = true)
-    })
-    @Transactional
-    public LocationEntity closeLocation(String tenantId, String locationId, String closedBy, String reason) {
-        LocationEntity location = getActiveLocationForTenant(tenantId, locationId);
-        String companyId = location.getCompanyId();
-        CompanyEntity company = getActiveCompany(companyId);
-        boolean isHeadquarter = locationId.equals(company.getMainLocationId());
-
-        if (location.getStatus() == LocationStatus.OPEN) {
-            long openCount = locationRepository.countByCompanyIdAndStatusAndTrashedAtIsNull(companyId, LocationStatus.OPEN);
-            if (openCount <= 1 && !isHeadquarter) {
-                throw new ConflictException(
-                        ErrorCode.LAST_OPEN_LOCATION_REQUIRED,
-                        "At least one OPEN location is required"
-                );
-            }
-        }
-        ensureMainLocationValid(company);
-
-        if (isHeadquarter) {
+    private void ensureCanClose(LocationEntity location, CompanyEntity company) {
+        if (location.getLocationId().equals(company.getMainLocationId())) {
             throw new ConflictException(ErrorCode.CANNOT_CLOSE_HEADQUARTER, "Headquarter cannot be closed");
         }
-        if (location.getStatus() == LocationStatus.CLOSED) {
-            return location;
+        long openCount = locationRepository.countByCompanyIdAndStatusAndTrashedAtIsNull(
+                company.getCompanyId(),
+                LocationStatus.OPEN
+        );
+        if (openCount <= 1) {
+            throw new ConflictException(
+                    ErrorCode.LAST_OPEN_LOCATION_REQUIRED,
+                    "At least one OPEN location is required"
+            );
         }
-
-        Instant now = Instant.now();
-        location.setStatus(LocationStatus.CLOSED);
-        location.setClosedAt(now);
-        location.setClosedBy(closedBy);
-        location.setClosedReason(reason);
-        location.setModifiedAt(now);
-        location.setModifiedBy(closedBy);
-        return location;
     }
 
-    @Caching(evict = {
-            @CacheEvict(cacheNames = "companiesById", key = "#tenantId"),
-            @CacheEvict(cacheNames = "locationsByCompany", allEntries = true)
-    })
-    @Transactional
-    public LocationEntity reopenLocation(String tenantId, String locationId, String reopenedBy) {
-        LocationEntity location = getActiveLocationForTenant(tenantId, locationId);
-        String companyId = location.getCompanyId();
-        CompanyEntity company = getActiveCompany(companyId);
-        ensureMainLocationValid(company);
+    private void closeLocationEntity(LocationEntity location, String actor, Instant now) {
+        location.setStatus(LocationStatus.CLOSED);
+        location.setClosedAt(now);
+        location.setClosedBy(actor);
+        location.setClosedReason(null);
+        location.setModifiedAt(now);
+        location.setModifiedBy(actor);
+    }
 
+    private void reopenLocationEntity(LocationEntity location, String actor, Instant now) {
         location.setStatus(LocationStatus.OPEN);
         location.setClosedAt(null);
         location.setClosedBy(null);
         location.setClosedReason(null);
-        location.setModifiedAt(Instant.now());
-        location.setModifiedBy(reopenedBy);
-        return location;
-    }
-
-    @Caching(evict = {
-            @CacheEvict(cacheNames = "companiesById", key = "#tenantId"),
-            @CacheEvict(cacheNames = "locationsByCompany", allEntries = true)
-    })
-    @Transactional
-    public LocationEntity trashLocation(String tenantId, String locationId, String trashedBy) {
-        LocationEntity location = getActiveLocationForTenant(tenantId, locationId);
-        String companyId = location.getCompanyId();
-        CompanyEntity company = getActiveCompany(companyId);
-        ensureMainLocationValid(company);
-
-        if (locationId.equals(company.getMainLocationId())) {
-            throw new ConflictException(ErrorCode.CANNOT_TRASH_MAIN_LOCATION, "Main location cannot be trashed");
-        }
-
-        if (location.getStatus() == LocationStatus.OPEN) {
-            long openCount = locationRepository.countByCompanyIdAndStatusAndTrashedAtIsNull(companyId, LocationStatus.OPEN);
-            if (openCount <= 1) {
-                throw new ConflictException(
-                        ErrorCode.LAST_OPEN_LOCATION_REQUIRED,
-                        "The last OPEN location cannot be trashed"
-                );
-            }
-        }
-
-        Instant now = Instant.now();
-        location.setTrashedAt(now);
-        location.setTrashedBy(trashedBy);
-        location.setTrashedCause(TrashedCause.MANUAL);
         location.setModifiedAt(now);
-        location.setModifiedBy(trashedBy);
-        return location;
-    }
-
-    @Caching(evict = {
-            @CacheEvict(cacheNames = "companiesById", key = "#tenantId"),
-            @CacheEvict(cacheNames = "locationsByCompany", allEntries = true)
-    })
-    @Transactional
-    public LocationEntity restoreLocation(String tenantId, String locationId, String restoredBy) {
-        LocationEntity location = locationRepository.findById(locationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Location not found: " + locationId));
-
-        if (!tenantId.equals(location.getCompanyId())) {
-            throw new AccessDeniedException("tenant_id does not match location.companyId");
-        }
-        String companyId = location.getCompanyId();
-        CompanyEntity company = getActiveCompany(companyId);
-
-        if (location.getTrashedAt() == null) {
-            ensureMainLocationValid(company);
-            return location;
-        }
-
-        Instant now = Instant.now();
-        location.setTrashedAt(null);
-        location.setTrashedBy(null);
-        location.setTrashedCause(null);
-        location.setModifiedAt(now);
-        location.setModifiedBy(restoredBy);
-
-        ensureMainLocationValid(company);
-        ensureAtLeastOneOpenLocation(companyId);
-        return location;
+        location.setModifiedBy(actor);
     }
 
     private CompanyEntity getActiveCompany(String companyId) {
@@ -295,13 +220,6 @@ public class LocationCommandService {
                 });
         if (main.getStatus() != LocationStatus.OPEN) {
             throw new ConflictException(ErrorCode.MAIN_LOCATION_MUST_BE_OPEN, "Main location must be OPEN");
-        }
-    }
-
-    private void ensureAtLeastOneOpenLocation(String companyId) {
-        long open = locationRepository.countByCompanyIdAndStatusAndTrashedAtIsNull(companyId, LocationStatus.OPEN);
-        if (open <= 0) {
-            throw new ConflictException(ErrorCode.LAST_OPEN_LOCATION_REQUIRED, "At least one OPEN location is required");
         }
     }
 
