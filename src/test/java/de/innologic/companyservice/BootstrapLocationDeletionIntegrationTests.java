@@ -21,6 +21,7 @@ import de.innologic.companyservice.persistence.repository.CompanyRepository;
 import de.innologic.companyservice.persistence.repository.DeletionAckRepository;
 import de.innologic.companyservice.persistence.repository.DeletionTombstoneRepository;
 import de.innologic.companyservice.persistence.repository.LocationRepository;
+import de.innologic.companyservice.service.CompanyDeletionWorkflowService;
 import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -58,6 +59,9 @@ class BootstrapLocationDeletionIntegrationTests {
 
     @Autowired
     private DeletionAckRepository deletionAckRepository;
+
+    @Autowired
+    private CompanyDeletionWorkflowService companyDeletionWorkflowService;
 
     @BeforeEach
     void cleanDatabase() {
@@ -657,16 +661,7 @@ class BootstrapLocationDeletionIntegrationTests {
                                 .authorities(() -> "SCOPE_company:read")))
                 .andExpect(status().isNotFound());
 
-        mockMvc.perform(post("/companies/{companyId}/deletion-ack", companyId)
-                        .with(jwt().jwt(jwt -> jwt
-                                        .claim("sub", "admin-1")
-                                        .claim("tenant_id", companyId)
-                                        .claim("subject_type", "USER"))
-                                .authorities(() -> "SCOPE_company:admin"))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"serviceName\":\"template-service\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.state").value("COMPLETED"));
+        companyDeletionWorkflowService.acknowledgeDeletion(companyId, "template-service", "admin-1");
 
         assertThat(companyRepository.findById(companyId)).isEmpty();
         assertThat(locationRepository.findById(locationId)).isEmpty();

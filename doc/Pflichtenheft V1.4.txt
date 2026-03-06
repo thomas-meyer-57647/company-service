@@ -85,7 +85,7 @@ Der company-service verwaltet Company-Stammdaten (Mandant) und Locations (Stando
 Schwerpunkte:
 Company-Metadaten und Locations verwalten
 Hauptstandort (Headquarter) pro Company über company.mainLocationId
-Location-Status OPEN/CLOSED mit Regeln für close/reopen
+Location-Status OPEN/CLOSED mit Regeln via `PATCH /api/v1/location/{locationId}` und dem `status`-Feld
 Jurisdiktion auf Location-Ebene: timezone, countryCode, regionCode
 Mandantentrennung über tenant_id im JWT
 Docking-Contract für Kontakt- und Kommunikationsdaten über OwnerKeys
@@ -95,7 +95,7 @@ Löschung über orchestrierten Deletion Workflow (Hard-Delete)
 2.1 Enthalten
 CRUD für Company und Location (inkl. Listen mit Paging/Sort/Filter)
 Headquarter-Funktion (lesen/setzen)
-Statuswechsel close/reopen
+Statuswechsel über `PATCH /api/v1/location/{locationId}` mit `status=OPEN`/`CLOSED`
 Jurisdiktion-Felder inkl. Normalisierung/Validierung
 JWT-Validierung inkl. Audience-Check, Scopes und Mandantentrennung
 Deletion Workflow inkl. technischem Tombstone und Events (optional über Outbox)
@@ -237,21 +237,14 @@ GET
 /api/v1/location/{locationId}
 company:read
 Location
-PUT/PATCH
-/api/v1/location/{locationId}
-company:write
-Location
-POST
-/api/v1/location/{locationId}/close
-company:admin
-Location
-POST
-/api/v1/location/{locationId}/reopen
-company:write
-Location
-DELETE
-/api/v1/location/{locationId}
-company:admin
+  PUT/PATCH
+  /api/v1/location/{locationId}
+  company:write
+  Location
+  Hinweis: Statuswechsel (OPEN/CLOSED) erfolgt über PATCH /api/v1/location/{locationId} mit dem Feld `status`.
+  DELETE
+  /api/v1/location/{locationId}
+  company:admin
 
 Bootstrap ist zusätzlich eingeschränkt:
 subject_type=SERVICE
@@ -283,13 +276,11 @@ Legacy:
 PUT /api/v1/companies/{companyId}/main-location
 
 Locations:
-GET /api/v1/companies/{companyId}/locations
-POST /api/v1/companies/{companyId}/locations
-GET /api/v1/location/{locationId}
-PUT /api/v1/location/{locationId} / PATCH /api/v1/location/{locationId}
-POST /api/v1/location/{locationId}/close
-POST /api/v1/location/{locationId}/reopen
-DELETE /api/v1/location/{locationId}
+  GET /api/v1/companies/{companyId}/locations
+  POST /api/v1/companies/{companyId}/locations
+  GET /api/v1/location/{locationId}
+  PUT /api/v1/location/{locationId} / PATCH /api/v1/location/{locationId}
+  DELETE /api/v1/location/{locationId}
 6.3 Standard-Query (Paging/Sort/Filter)
 Paging/Sort:
 page (default 0)

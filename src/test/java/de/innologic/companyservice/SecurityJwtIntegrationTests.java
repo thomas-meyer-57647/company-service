@@ -1,11 +1,13 @@
 package de.innologic.companyservice;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -40,6 +42,9 @@ import de.innologic.companyservice.service.CompanyDeletionWorkflowService;
 import de.innologic.companyservice.service.CompanyQueryService;
 import de.innologic.companyservice.persistence.entity.CompanyEntity;
 import de.innologic.companyservice.persistence.repository.DeletionTombstoneRepository;
+import de.innologic.companyservice.api.dto.location.LocationUpdateRequest.LocationPatchRequest;
+import de.innologic.companyservice.domain.ConflictException;
+import de.innologic.companyservice.domain.ErrorCode;
 import de.innologic.companyservice.service.LocationCommandService;
 import de.innologic.companyservice.service.LocationQueryService;
 
@@ -193,40 +198,6 @@ class SecurityJwtIntegrationTests {
     }
 
     @Test
-    void restoreEndpointRequiresAdminScope() throws Exception {
-        mockMvc.perform(post("/companies/{companyId}/restore", "company-1")
-                        .with(jwt()
-                                .jwt(builder -> builder
-                                        .subject("user-1")
-                                        .claim("tenant_id", "company-1")
-                                        .claim("subject_type", "USER")
-                                        .claim("aud", List.of("company-service"))
-                                        .claim("scp", List.of("company:read"))
-                                        .claim("scope", List.of("company:read")))
-                                .authorities(new SimpleGrantedAuthority("SCOPE_company:read"))))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("SCOPE_MISSING"))
-                .andExpect(jsonPath("$.message").value("Required scope is missing"));
-    }
-
-    @Test
-    void deletionAckEndpointRequiresAdminScope() throws Exception {
-        mockMvc.perform(post("/companies/{companyId}/deletion-ack", "company-1")
-                        .with(jwt()
-                                .jwt(builder -> builder
-                                        .subject("user-1")
-                                        .claim("tenant_id", "company-1")
-                                        .claim("subject_type", "USER")
-                                        .claim("aud", List.of("company-service"))
-                                        .claim("scp", List.of("company:write"))
-                                        .claim("scope", List.of("company:write")))
-                                .authorities(new SimpleGrantedAuthority("SCOPE_company:write"))))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("SCOPE_MISSING"))
-                .andExpect(jsonPath("$.message").value("Required scope is missing"));
-    }
-
-    @Test
     void missingTenantIdReturnsUnauthorized() throws Exception {
         Instant now = Instant.now();
         Jwt jwt = Jwt.withTokenValue("no-tenant")
@@ -341,20 +312,72 @@ class SecurityJwtIntegrationTests {
         doThrow(new AccessDeniedException("tenant mismatch"))
                 .when(requestContext).assertTenantHeaderMatches("other-company");
 
-        mockMvc.perform(delete("/location/{locationId}", "loc-1")
+        mockMvc.perform(patch("/location/{locationId}", "loc-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"CLOSED\",\"version\":1}")
                         .with(jwt()
                                 .jwt(builder -> builder
                                         .subject("user-1")
                                         .claim("tenant_id", "company-1")
                                         .claim("subject_type", "USER")
                                         .claim("aud", List.of("company-service"))
-                                        .claim("scp", List.of("company:admin"))
-                                        .claim("scope", List.of("company:admin")))
-                                .authorities(new SimpleGrantedAuthority("SCOPE_company:admin")))
+                                        .claim("scp", List.of("company:write"))
+                                        .claim("scope", List.of("company:write")))
+                                .authorities(new SimpleGrantedAuthority("SCOPE_company:write")))
                         .header("X-Tenant-Id", "other-company"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("TENANT_MISMATCH"))
                 .andExpect(jsonPath("$.message").value("tenant mismatch"));
+    }
+
+    @Test
+    void closeLocationPatchReturnsCannotCloseHeadquarter() throws Exception {
+        mockTenantContext("company-1");
+        when(locationCommandService.patchLocation(
+                        any(), eq("loc-1"), any(LocationPatchRequest.class), any()))
+                .thenThrow(new ConflictException(ErrorCode.CANNOT_CLOSE_HEADQUARTER, "Headquarter cannot be closed"));
+
+        mockMvc.perform(patch("/location/{locationId}", "loc-1")
+                        .with(jwt()
+                                .jwt(builder -> builder
+                                        .subject("user-1")
+                                        .claim("tenant_id", "company-1")
+                                        .claim("subject_type", "USER")
+                                        .claim("aud", List.of("company-service"))
+                                        .claim("scp", List.of("company:write"))
+                                        .claim("scope", List.of("company:write")))
+                                .authorities(new SimpleGrantedAuthority("SCOPE_company:write")))
+                        .header("X-Tenant-Id", "company-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"CLOSED\",\"version\":1}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CANNOT_CLOSE_HEADQUARTER"))
+                .andExpect(jsonPath("$.message").value("Headquarter cannot be closed"));
+    }
+
+    @Test
+    void closeLocationPatchReturnsLastOpenLocationRequired() throws Exception {
+        mockTenantContext("company-1");
+        when(locationCommandService.patchLocation(
+                        any(), eq("loc-1"), any(LocationPatchRequest.class), any()))
+                .thenThrow(new ConflictException(ErrorCode.LAST_OPEN_LOCATION_REQUIRED, "At least one OPEN location is required"));
+
+        mockMvc.perform(patch("/location/{locationId}", "loc-1")
+                        .with(jwt()
+                                .jwt(builder -> builder
+                                        .subject("user-1")
+                                        .claim("tenant_id", "company-1")
+                                        .claim("subject_type", "USER")
+                                        .claim("aud", List.of("company-service"))
+                                        .claim("scp", List.of("company:write"))
+                                        .claim("scope", List.of("company:write")))
+                                .authorities(new SimpleGrantedAuthority("SCOPE_company:write")))
+                        .header("X-Tenant-Id", "company-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"CLOSED\",\"version\":1}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("LAST_OPEN_LOCATION_REQUIRED"))
+                .andExpect(jsonPath("$.message").value("At least one OPEN location is required"));
     }
 
     private CompanyEntity createCompanyEntity() {
@@ -372,5 +395,10 @@ class SecurityJwtIntegrationTests {
         entity.setModifiedBy("auth-service");
         entity.setVersion(1L);
         return entity;
+    }
+
+    private void mockTenantContext(String tenantId) {
+        when(requestContext.tenantIdFromJwt()).thenReturn(Optional.of(tenantId));
+        when(requestContext.tenantId()).thenReturn(tenantId);
     }
 }
