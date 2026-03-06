@@ -208,7 +208,11 @@ public class CompanyController {
     }
 
     @PutMapping("/{companyId}/main-location")
-    @Operation(summary = "Set main location", security = {@SecurityRequirement(name = "bearerAuth", scopes = {"company:admin"})})
+    @Operation(
+            summary = "Set main location",
+            tags = {"Legacy/Internal"},
+            security = {@SecurityRequirement(name = "bearerAuth", scopes = {"company:admin"})}
+    )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Main location updated"),
             @ApiResponse(responseCode = "401", description = "Missing/invalid JWT", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
@@ -329,7 +333,11 @@ public class CompanyController {
     }
 
     @PostMapping("/{companyId}/deletion-ack")
-    @Operation(summary = "Acknowledge company deletion", description = "Internal transition endpoint for deletion workflow acknowledgements.")
+    @Operation(
+            summary = "Acknowledge company deletion",
+            description = "Internal transition endpoint for deletion workflow acknowledgements.",
+            tags = {"Legacy/Internal"}
+    )
     @SecurityRequirement(name = "bearerAuth", scopes = {"company:admin"})
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Ack accepted", content = @Content(schema = @Schema(implementation = CompanyDeletionResponse.class))),
@@ -349,7 +357,12 @@ public class CompanyController {
     }
 
     @PostMapping("/{companyId}/restore")
-    @Operation(summary = "Restore company", description = "Restores company and ensures valid main location plus at least one OPEN location.", security = {@SecurityRequirement(name = "bearerAuth", scopes = {"company:admin"})})
+    @Operation(
+            summary = "Restore company",
+            description = "Restores company and ensures valid main location plus at least one OPEN location.",
+            tags = {"Legacy/Internal"},
+            security = {@SecurityRequirement(name = "bearerAuth", scopes = {"company:admin"})}
+    )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Company restored"),
             @ApiResponse(responseCode = "401", description = "Missing/invalid JWT", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
