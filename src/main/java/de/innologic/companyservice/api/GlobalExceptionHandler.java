@@ -4,16 +4,19 @@ import de.innologic.companyservice.domain.DomainException;
 import de.innologic.companyservice.domain.ErrorCode;
 import de.innologic.companyservice.domain.ResourceNotFoundException;
 import de.innologic.companyservice.config.CorrelationIdFilter;
+import de.innologic.companyservice.config.SecurityConfig.ScopeAuthorizationManager.ScopeMissingException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.util.StringUtils;
 import org.springframework.validation.BindException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -40,7 +43,29 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AccessDeniedException.class)
     ResponseEntity<ErrorResponse> handleForbidden(AccessDeniedException ex, HttpServletRequest request) {
-        return build(HttpStatus.FORBIDDEN, ErrorCode.FORBIDDEN, ex.getMessage(), request, List.of());
+        ErrorCode errorCode = ErrorCode.FORBIDDEN;
+        String message = ex.getMessage();
+
+        if (ex instanceof ScopeMissingException) {
+            errorCode = ErrorCode.SCOPE_MISSING;
+            message = "Required scope is missing";
+        } else if (isTenantMismatch(ex)) {
+            errorCode = ErrorCode.TENANT_MISMATCH;
+            message = "tenant mismatch";
+        } else if (!StringUtils.hasText(message)) {
+            message = "Access denied";
+        }
+
+        return build(HttpStatus.FORBIDDEN, errorCode, message, request, List.of());
+    }
+
+    private boolean isTenantMismatch(AccessDeniedException ex) {
+        String message = ex.getMessage();
+        if (!StringUtils.hasText(message)) {
+            return false;
+        }
+        return message.toLowerCase(Locale.ROOT).contains("tenant_id")
+                || message.toLowerCase(Locale.ROOT).contains("x-company-id");
     }
 
     @ExceptionHandler(ResourceNotFoundException.class)

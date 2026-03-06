@@ -4,11 +4,14 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
+import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authorization.AuthorizationDecision;
+import org.springframework.security.authorization.AuthorizationManager;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -25,7 +28,10 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
+import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import org.springframework.util.StringUtils;
+import org.springframework.security.access.AccessDeniedException;
+import jakarta.servlet.http.HttpServletRequest;
 
 @Configuration
 public class SecurityConfig {
@@ -80,35 +86,35 @@ public class SecurityConfig {
                             return new AuthorizationDecision(hasScope && isBootstrapService);
                         })
                         .requestMatchers(HttpMethod.GET, "/companies/*")
-                        .hasAuthority("SCOPE_company:read")
+                        .access(scopeAuth("SCOPE_company:read"))
                         .requestMatchers(HttpMethod.GET, "/companies/*/locations")
-                        .hasAuthority("SCOPE_company:read")
+                        .access(scopeAuth("SCOPE_company:read"))
                         .requestMatchers(HttpMethod.PUT, "/companies/*")
-                        .hasAuthority("SCOPE_company:write")
+                        .access(scopeAuth("SCOPE_company:write"))
                         .requestMatchers(HttpMethod.PUT, "/companies/*/logo")
-                        .hasAuthority("SCOPE_company:write")
+                        .access(scopeAuth("SCOPE_company:write"))
                         .requestMatchers(HttpMethod.DELETE, "/companies/*/logo")
-                        .hasAuthority("SCOPE_company:write")
+                        .access(scopeAuth("SCOPE_company:write"))
                         .requestMatchers(HttpMethod.PUT, "/companies/*/main-location")
-                        .hasAuthority("SCOPE_company:admin")
+                        .access(scopeAuth("SCOPE_company:admin"))
                         .requestMatchers(HttpMethod.DELETE, "/companies/*")
-                        .hasAuthority("SCOPE_company:admin")
+                        .access(scopeAuth("SCOPE_company:admin"))
                         .requestMatchers(HttpMethod.POST, "/companies/*/restore")
-                        .hasAuthority("SCOPE_company:admin")
+                        .access(scopeAuth("SCOPE_company:admin"))
                         .requestMatchers(HttpMethod.POST, "/companies/*/deletion-ack")
-                        .hasAuthority("SCOPE_company:admin")
+                        .access(scopeAuth("SCOPE_company:admin"))
                         .requestMatchers(HttpMethod.GET, "/location/*")
-                        .hasAuthority("SCOPE_company:read")
+                        .access(scopeAuth("SCOPE_company:read"))
                         .requestMatchers(HttpMethod.PUT, "/location/*")
-                        .hasAuthority("SCOPE_company:write")
+                        .access(scopeAuth("SCOPE_company:write"))
                         .requestMatchers(HttpMethod.POST, "/location/*/reopen")
-                        .hasAuthority("SCOPE_company:write")
+                        .access(scopeAuth("SCOPE_company:write"))
                         .requestMatchers(HttpMethod.POST, "/location/*/close")
-                        .hasAuthority("SCOPE_company:admin")
+                        .access(scopeAuth("SCOPE_company:admin"))
                         .requestMatchers(HttpMethod.DELETE, "/location/*")
-                        .hasAuthority("SCOPE_company:admin")
+                        .access(scopeAuth("SCOPE_company:admin"))
                         .requestMatchers(HttpMethod.POST, "/location/*/restore")
-                        .hasAuthority("SCOPE_company:admin")
+                        .access(scopeAuth("SCOPE_company:admin"))
                         .requestMatchers("/**")
                         .access((authentication, context) -> {
                             Authentication token = authentication.get();
@@ -205,5 +211,46 @@ public class SecurityConfig {
     private boolean isBootstrapService(Jwt jwt) {
         return "SERVICE".equals(jwt.getClaimAsString("subject_type"))
                 && "auth-service".equals(jwt.getSubject());
+    }
+
+    private ScopeAuthorizationManager scopeAuth(String authority) {
+        return new ScopeAuthorizationManager(authority);
+    }
+
+    public static final class ScopeAuthorizationManager implements AuthorizationManager<RequestAuthorizationContext> {
+
+        private final String requiredAuthority;
+
+        ScopeAuthorizationManager(String requiredAuthority) {
+            this.requiredAuthority = Objects.requireNonNull(requiredAuthority, "requiredAuthority");
+        }
+
+        @Override
+        public AuthorizationDecision authorize(Supplier<? extends Authentication> authentication, RequestAuthorizationContext context) {
+            Authentication auth = authentication.get();
+            if (auth == null || !auth.isAuthenticated()) {
+                return new AuthorizationDecision(false);
+            }
+
+            boolean hasAuthority = auth.getAuthorities().stream()
+                    .map(GrantedAuthority::getAuthority)
+                    .anyMatch(requiredAuthority::equals);
+
+            if (hasAuthority) {
+                return new AuthorizationDecision(true);
+            }
+
+            HttpServletRequest request = context.getRequest();
+            String method = request != null ? request.getMethod() : "UNKNOWN";
+            String uri = request != null ? request.getRequestURI() : "UNKNOWN";
+            throw new ScopeMissingException(requiredAuthority, method, uri);
+        }
+
+        public static final class ScopeMissingException extends AccessDeniedException {
+
+            ScopeMissingException(String authority, String method, String uri) {
+                super(String.format("Missing required scope %s for %s %s", authority, method, uri));
+            }
+        }
     }
 }

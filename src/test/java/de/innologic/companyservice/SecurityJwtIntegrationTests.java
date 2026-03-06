@@ -3,6 +3,7 @@ package de.innologic.companyservice;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -10,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,6 +22,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.cache.CacheManager;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.BadJwtException;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -88,6 +91,7 @@ class SecurityJwtIntegrationTests {
     @BeforeEach
     void setupBootstrap() {
         when(requestContext.subjectId()).thenReturn("auth-service");
+        when(requestContext.tenantIdFromJwt()).thenReturn(Optional.empty());
         when(companyCommandService.createCompany(
                         any(), any(), any(), any(), any(),
                         any(), any(), any(), any(), any(), any()))
@@ -166,6 +170,23 @@ class SecurityJwtIntegrationTests {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"))
                 .andExpect(jsonPath("$.message").value("missing claim: scp"));
+    }
+
+    @Test
+    void missingRequiredScopeReturnsScopeMissing() throws Exception {
+        mockMvc.perform(get("/companies/{companyId}", "company-1")
+                        .with(jwt()
+                                .jwt(builder -> builder
+                                        .subject("user-1")
+                                        .claim("tenant_id", "company-1")
+                                        .claim("subject_type", "USER")
+                                        .claim("aud", List.of("company-service"))
+                                        .claim("scp", List.of("company:write"))
+                                        .claim("scope", List.of("company:write")))
+                                .authorities(new SimpleGrantedAuthority("SCOPE_company:write"))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("SCOPE_MISSING"))
+                .andExpect(jsonPath("$.message").value("Required scope is missing"));
     }
 
     @Test
@@ -258,7 +279,9 @@ class SecurityJwtIntegrationTests {
                                 .authorities(new SimpleGrantedAuthority("SCOPE_company:create")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(COMPANY_CREATE_PAYLOAD))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"))
+                .andExpect(jsonPath("$.message").value("Access denied"));
     }
 
     @Test
@@ -272,6 +295,28 @@ class SecurityJwtIntegrationTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(COMPANY_CREATE_PAYLOAD))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void tenantMismatchFromServiceReturnsTenantMismatchCode() throws Exception {
+        when(requestContext.tenantIdFromJwt()).thenReturn(Optional.of("company-1"));
+        when(locationCommandService.trashLocation(any(), any(), any()))
+                .thenThrow(new AccessDeniedException("tenant_id does not match location.companyId"));
+
+        mockMvc.perform(delete("/location/{locationId}", "loc-1")
+                        .with(jwt()
+                                .jwt(builder -> builder
+                                        .subject("user-1")
+                                        .claim("tenant_id", "company-1")
+                                        .claim("subject_type", "USER")
+                                        .claim("aud", List.of("company-service"))
+                                        .claim("scp", List.of("company:admin"))
+                                        .claim("scope", List.of("company:admin")))
+                                .authorities(new SimpleGrantedAuthority("SCOPE_company:admin")))
+                        .header("X-Company-Id", "company-1"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("TENANT_MISMATCH"))
+                .andExpect(jsonPath("$.message").value("tenant mismatch"));
     }
 
     private CompanyEntity createCompanyEntity() {
